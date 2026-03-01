@@ -1,9 +1,18 @@
 # Anime Character Loader
 
-Generate validated anime character SOUL.md files from multi-source data (AniList + Jikan + MediaWiki).
+> **输入角色名，稳定生成可用 SOUL.generated.md，避免同名误判。**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+**核心价值**: 解决 AniList/Jikan 同名角色混淆问题，通过强制消歧 + 语义验证，确保输出可直接用于 OpenClaw 角色扮演。
+
+**适合谁用**:
+- OpenClaw/AI Agent 用户想快速加载动漫角色
+- 角色扮演社区需要标准化 SOUL.md
+- 开发者想批量生成角色配置文件
+
+**3分钟上手**: 安装 → 运行命令 → 获得可用角色文件。
 
 ## Features
 
@@ -17,7 +26,7 @@ Generate validated anime character SOUL.md files from multi-source data (AniList
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/anime-character-loader.git
+git clone https://github.com/colinchen4/anime-character-loader.git
 cd anime-character-loader
 
 # Install dependencies
@@ -42,18 +51,41 @@ python load_character.py "Katou Megumi" --anime "Saenai Heroine no Sodatekata"
 python load_character.py "霞之丘诗羽" --info
 ```
 
-### Multi-character Merge
+### Multi-character Merge (三模式选择)
+
+生成多角色时，系统提供三种处理方式：
+
+| 模式 | 说明 | 适用场景 |
+|------|------|---------|
+| **REPLACE** | 完全替换现有文件 | 重新生成角色，丢弃旧数据 |
+| **MERGE** | 合并到现有文件 | 多角色共存，自动添加选择指南 |
+| **KEEP** | 保留现有，新建备份 | 不想覆盖，保留历史版本 |
 
 ```bash
-# Generate first character
+# 示例：生成《路人女主》双角色 SOUL
+
+# 第一步：生成第一个角色
 python load_character.py "加藤惠" --anime "Saekano"
-# Select [2] MERGE
+# 选择 [2] MERGE → 创建 SOUL.generated.md
 
-# Generate second character, merged into same file
+# 第二步：追加第二个角色
 python load_character.py "霞之丘诗羽" --anime "Saekano"
-# Select [2] MERGE
+# 选择 [2] MERGE → 合并到同一文件
 
-# Result: SOUL.generated.md with both characters + selection guide
+# 结果：SOUL.generated.md 包含双角色 + Character Selection Guide
+```
+
+**MERGE 模式输出结构**：
+```markdown
+## Megumi Katou
+[角色A的完整设定]
+
+## Utaha Kasumigaoka
+[角色B的完整设定]
+
+## Character Selection Guide
+- 选 Megumi 当需要...（被动观察型）
+- 选 Utaha 当需要...（主动毒舌型）
 ```
 
 ### Advanced Options
@@ -174,6 +206,28 @@ MAX_RETRIES = 3                       # API retry attempts
 | AniList | 50% | https://graphql.anilist.co | None |
 | Jikan | 30% | https://api.jikan.moe/v4 | None |
 | Fandom Wikia | 20% | wiki-specific | None |
+
+## ✅ Verified Scenarios / 已验证场景
+
+| 场景 | 测试状态 | 备注 |
+|------|---------|------|
+| 日文原名（加藤恵）| ✅ 通过 | AniList 优先匹配 |
+| 英文译名（Megumi Katou）| ✅ 通过 | Jikan 辅助匹配 |
+| 中日混合名（霞ヶ丘詩羽）| ✅ 通过 | Unicode 正常处理 |
+| 多角色 Merge | ✅ 通过 | Saekano 双角色测试通过 |
+| 强制消歧 | ✅ 通过 | "Sakura" + --anime "Fate" 正确识别 |
+| 语义验证失败重试 | ✅ 通过 | 自动重试 3 次 |
+| 缓存复用 | ✅ 通过 | 24h 内相同查询直接返回 |
+
+## ⚠️ Known Limitations / 已知限制
+
+| 限制 | 说明 |  workaround |
+|------|------|-------------|
+| 需要网络 | 依赖 AniList/Jikan API | 离线无法使用 |
+| 新番延迟 | 最新角色可能无数据 | 等待数据库更新或手动补充 |
+| 非常见角色 | 冷门角色可能查询失败 | 提供 `--anime` 提高匹配率 |
+| 中文 API | 暂不支持 Bilibili/中文源 | 依赖日文/英文名查询 |
+| Token 长度 | 超长输出可能截断 | 检查 `output` 完整性 |
 
 ## Requirements
 
