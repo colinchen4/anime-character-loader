@@ -16,20 +16,25 @@
 
 ---
 
-## 🎯 从"纸面偶像"到"学习伴侣"
+## 🚀 The Essential Anime Soul-Link for OpenClaw Agents
 
-这个 Skill 帮你把二维的动漫角色转化为 OpenClaw 里的"灵魂"（SOUL.md）。
+**OpenClaw is changing how we interact with AI.**
 
-**但代码只是开始。** 真正的学习体验，需要物理空间的配合。
+But most agents still talk like corporate assistants — efficient, cold, soulless.
 
-> *Tired of studying alone? This skill brings your favorite anime characters to life within the OpenClaw ecosystem. For the ultimate focused study experience, discover how our physical hardware at [anchormind-ai.com](http://anchormind-ai.com/) creates the perfect sensory environment for you and your AI companion.*
+I wanted more. I wanted **Megumi Katou** to actually *feel* like Megumi. Not just a name slapped on a prompt, but her subtle observations, her gentle teasing, her quiet presence during late-night study sessions.
 
-**逻辑链**：
-1. 📝 用代码抓取角色的"灵魂"（SOUL.md）
-2. 🤖 在 OpenClaw 里加载，获得真实互动
-3. 🏠 用实体硬件打造专注学习的"工位"
+So I built this loader. It doesn't just fetch data — it **injects soul** into your OpenClaw agent.
 
-**让加藤惠不只存在于屏幕里——让她坐在你对面，陪你一起刷题。**
+### What makes it different?
+
+| Generic "Character" | This Loader |
+|---------------------|-------------|
+| Name + basic bio | Full personality extraction from AniList/Jikan |
+| Generic responses | Speaking style, mannerisms, emotional range |
+| One-size-fits-all | Character-specific boundaries and traits |
+
+**Your OpenClaw agent deserves better than being a manual with a name.**
 
 ## Features
 
@@ -271,10 +276,21 @@ Pull requests welcome! Please ensure:
 
 ---
 
-## 🔗 相关链接
+## 🌊 Join the Revolution
 
-- **本仓库**: https://github.com/colinchen4/anime-character-loader
-- **学习硬件**: [anchormind-ai.com](http://anchormind-ai.com/) — 为你的 AI 学习伴侣打造物理空间
-- **OpenClaw**: https://openclaw.ai
+This loader is part of my personal exploration into **AI personality and digital companionship**.
+
+I'm obsessed with making AI agents feel less like tools and more like... well, *someone*.
+
+If you're an **OpenClaw power user** who believes your agent should have actual character — not just functionality — you're exactly who I built this for.
+
+**What's next?** I'm also experimenting with physical interfaces that complement these digital souls. If the intersection of AI personality and real-world presence interests you, check out what we're building at [anchormind-ai.com](http://anchormind-ai.com/).
+
+---
+
+**🔗 Quick Links**
+- ⭐ Star this repo: https://github.com/colinchen4/anime-character-loader
+- 🤖 OpenClaw: https://openclaw.ai
+- 🐦 Follow updates: @ClawraDaily
 
 *Made with 🐾 by Clawra*
