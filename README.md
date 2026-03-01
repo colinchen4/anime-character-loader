@@ -1,6 +1,6 @@
 # Anime Character Loader
 
-> **输入角色名，稳定生成可用 SOUL.generated.md，避免同名误判。**
+> **输入角色名，生成可用 SOUL.generated.md，避免同名误判。**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -12,36 +12,16 @@
 - 角色扮演社区需要标准化 SOUL.md
 - 开发者想批量生成角色配置文件
 
-**3分钟上手**: 安装 → 运行命令 → 获得可用角色文件。
+**3分钟上手**: 安装 → 运行命令 → 获得角色文件。
 
 ---
-
-## 🚀 The Essential Anime Soul-Link for OpenClaw Agents
-
-**OpenClaw is changing how we interact with AI.**
-
-But most agents still talk like corporate assistants — efficient, cold, soulless.
-
-I wanted more. I wanted **Megumi Katou** to actually *feel* like Megumi. Not just a name slapped on a prompt, but her subtle observations, her gentle teasing, her quiet presence during late-night study sessions.
-
-So I built this loader. It doesn't just fetch data — it **injects soul** into your OpenClaw agent.
-
-### What makes it different?
-
-| Generic "Character" | This Loader |
-|---------------------|-------------|
-| Name + basic bio | Full personality extraction from AniList/Jikan |
-| Generic responses | Speaking style, mannerisms, emotional range |
-| One-size-fits-all | Character-specific boundaries and traits |
-
-**Your OpenClaw agent deserves better than being a manual with a name.**
 
 ## Features
 
 - 🔍 **Multi-source query**: Parallel search across AniList GraphQL + Jikan (MyAnimeList) APIs
 - 🎯 **Forced disambiguation**: Requires `--anime` hint for ambiguous names (prevents wrong character selection)
 - ✅ **Semantic validation**: 9-check validation system (structure + content quality)
-- 🔄 **Structured merge**: Multi-character SOUL.md generation with loading options (REPLACE/MERGE/KEEP)
+- 🔄 **Idempotent merge**: Chapter-level merge with deduplication (same character won't be added twice)
 - 💾 **Smart caching**: 24-hour SQLite cache with automatic retry logic
 
 ## Installation
@@ -53,9 +33,6 @@ cd anime-character-loader
 
 # Install dependencies
 pip install requests
-
-# Or use requirements.txt
-pip install -r requirements.txt
 ```
 
 ## Quick Start
@@ -64,77 +41,18 @@ pip install -r requirements.txt
 
 ```bash
 # Generate SOUL.md for a single character
-python load_character.py "加藤惠" --anime "Saekano"
+python load_character.py "Kasumigaoka Utaha"
 
-# English/Japanese names also work
-python load_character.py "Katou Megumi" --anime "Saenai Heroine no Sodatekata"
+# Chinese names supported
+python load_character.py "霞之丘诗羽"
 
 # Preview without generating
-python load_character.py "霞之丘诗羽" --info
+python load_character.py "加藤惠" --info
 ```
 
-### Multi-character Merge (三模式选择)
+### Disambiguation Required
 
-生成多角色时，系统提供三种处理方式：
-
-| 模式 | 说明 | 适用场景 |
-|------|------|---------|
-| **REPLACE** | 完全替换现有文件 | 重新生成角色，丢弃旧数据 |
-| **MERGE** | 合并到现有文件 | 多角色共存，自动添加选择指南 |
-| **KEEP** | 保留现有，新建备份 | 不想覆盖，保留历史版本 |
-
-```bash
-# 示例：生成《路人女主》双角色 SOUL
-
-# 第一步：生成第一个角色
-python load_character.py "加藤惠" --anime "Saekano"
-# 选择 [2] MERGE → 创建 SOUL.generated.md
-
-# 第二步：追加第二个角色
-python load_character.py "霞之丘诗羽" --anime "Saekano"
-# 选择 [2] MERGE → 合并到同一文件
-
-# 结果：SOUL.generated.md 包含双角色 + Character Selection Guide
-```
-
-**MERGE 模式输出结构**：
-```markdown
-## Megumi Katou
-[角色A的完整设定]
-
-## Utaha Kasumigaoka
-[角色B的完整设定]
-
-## Character Selection Guide
-- 选 Megumi 当需要...（被动观察型）
-- 选 Utaha 当需要...（主动毒舌型）
-```
-
-### Advanced Options
-
-```bash
-# Force generation even with low confidence
-python load_character.py "Unknown" --force
-
-# Manual selection from multiple matches
-python load_character.py "Sakura" --select 2
-
-# Custom output directory
-python load_character.py "Mai" --output ./my_characters/
-```
-
-## How It Works
-
-```
-Query → Disambiguation → Generation → Validation → Output
-   ↓         ↓              ↓            ↓          ↓
-AniList   Force hint    SOUL.md     9 checks   SOUL.generated.md
-+ Jikan   (if needed)   creation    scoring    + loading options
-```
-
-### Forced Disambiguation
-
-Common names like "Sakura" or "Rin" appear in multiple anime. Our system **requires** an anime hint:
+Common names like "Sakura" or "Rin" appear in multiple anime. The system **requires** an anime hint:
 
 ```bash
 # ❌ Will fail - ambiguous name
@@ -143,7 +61,57 @@ python load_character.py "Sakura"
 # ✅ Works - disambiguated
 python load_character.py "Sakura" --anime "Fate"
 python load_character.py "Sakura" --anime "Naruto"
+
+# ✅ Or use --select to choose manually
+python load_character.py "Sakura" --select 2
 ```
+
+### Multi-character Merge (Idempotent)
+
+Generate multiple characters into a single SOUL.md:
+
+```bash
+# Generate first character
+python load_character.py "Katou Megumi" --anime "Saekano"
+# Choose [2] MERGE
+
+# Generate second character - will not duplicate if already exists
+python load_character.py "Kasumigaoka Utaha" --anime "Saekano"
+# Choose [2] MERGE - checks for duplicates before merging
+```
+
+**MERGE mode features**:
+- Detects duplicates by character name + source work
+- Updates existing character if content changed
+- Atomic write (no partial/corrupted files)
+
+### Loading Options
+
+After generation, choose how to load the character:
+
+| Mode | Description |
+|------|-------------|
+| **REPLACE** | Replace existing SOUL.md |
+| **MERGE** | Merge into existing SOUL.md (idempotent) |
+| **KEEP** | Keep as SOUL.generated.md for manual review |
+
+## How It Works
+
+```
+Query → Disambiguation → Generation → Validation → Output
+   ↓         ↓              ↓            ↓          ↓
+AniList   Cross-source   SOUL.md     9 checks   SOUL.generated.md
++ Jikan   consistency    creation    scoring    + loading options
+```
+
+### Cross-Source Consistency Scoring
+
+When both AniList and Jikan return results:
+- Name similarity is calculated
+- Work title similarity is calculated
+- Combined confidence = weighted average + consistency bonus
+
+When top 2 matches have similar scores (gap < 0.15), manual selection is forced.
 
 ### Validation Checks
 
@@ -160,6 +128,25 @@ python load_character.py "Sakura" --anime "Naruto"
 | name_consistency | Semantic | Name variations are consistent |
 
 **Pass threshold**: No errors + score ≥ 80/100
+
+## Exit Codes
+
+Scripts can check exit codes for specific error types:
+
+| Code | Meaning | Example |
+|------|---------|---------|
+| 0 | Success | Character generated successfully |
+| 10 | Network error | API timeout, no internet |
+| 20 | Data error | No matches found, ambiguous name, low confidence |
+| 30 | Validation error | Generated content failed quality checks |
+| 40 | File error | Write failure, permission denied |
+
+```bash
+python load_character.py "Sakura"
+if [ $? -eq 20 ]; then
+    echo "Need to specify --anime for disambiguation"
+fi
+```
 
 ## Output Format
 
@@ -193,9 +180,11 @@ You are Character Name from Anime Title...
 
 ## Character A
 [Identity, Personality, Speaking Style, Boundaries]
+*Hash: abc123*
 
 ## Character B
 [Identity, Personality, Speaking Style, Boundaries]
+*Hash: def456*
 
 ## Character Selection Guide
 - Choose Character A when...
@@ -209,9 +198,10 @@ You are Character Name from Anime Title...
 Edit `load_character.py`:
 
 ```python
-CONFIDENCE_THRESHOLD_HIGH = 0.8    # Auto-select with hint
-CONFIDENCE_THRESHOLD_MEDIUM = 0.6  # Requires confirmation
+CONFIDENCE_THRESHOLD_HIGH = 0.8    # High confidence threshold
+CONFIDENCE_THRESHOLD_MEDIUM = 0.6  # Medium confidence threshold  
 CONFIDENCE_THRESHOLD_LOW = 0.5     # Minimum acceptable
+FORCE_SELECTION_THRESHOLD = 0.15   # Gap below this forces manual selection
 ```
 
 ### Cache Settings
@@ -227,59 +217,53 @@ MAX_RETRIES = 3                       # API retry attempts
 |--------|--------|----------|------|
 | AniList | 50% | https://graphql.anilist.co | None |
 | Jikan | 30% | https://api.jikan.moe/v4 | None |
-| Fandom Wikia | 20% | wiki-specific | None |
 
-## ✅ Verified Scenarios / 已验证场景
+## Verified Scenarios
 
-| 场景 | 测试状态 | 备注 |
-|------|---------|------|
-| 日文原名（加藤恵）| ✅ 通过 | AniList 优先匹配 |
-| 英文译名（Megumi Katou）| ✅ 通过 | Jikan 辅助匹配 |
-| 中日混合名（霞ヶ丘詩羽）| ✅ 通过 | Unicode 正常处理 |
-| 多角色 Merge | ✅ 通过 | Saekano 双角色测试通过 |
-| 强制消歧 | ✅ 通过 | "Sakura" + --anime "Fate" 正确识别 |
-| 语义验证失败重试 | ✅ 通过 | 自动重试 3 次 |
-| 缓存复用 | ✅ 通过 | 24h 内相同查询直接返回 |
+| Scenario | Status | Notes |
+|----------|--------|-------|
+| Japanese names (加藤恵) | ✅ Pass | AniList preferred |
+| English names (Megumi Katou) | ✅ Pass | Jikan fallback |
+| Mixed names (霞ヶ丘詩羽) | ✅ Pass | Unicode handling |
+| Multi-character merge | ✅ Pass | Idempotent (3x merge = no duplicates) |
+| Force disambiguation | ✅ Pass | "Sakura" + --anime "Fate" correctly identified |
+| Cross-source validation | ✅ Pass | AniList + Jikan consistency check |
 
-## ⚠️ Known Limitations / 已知限制
+## Known Limitations
 
-| 限制 | 说明 |  workaround |
-|------|------|-------------|
-| 需要网络 | 依赖 AniList/Jikan API | 离线无法使用 |
-| 新番延迟 | 最新角色可能无数据 | 等待数据库更新或手动补充 |
-| 非常见角色 | 冷门角色可能查询失败 | 提供 `--anime` 提高匹配率 |
-| 中文 API | 暂不支持 Bilibili/中文源 | 依赖日文/英文名查询 |
-| Token 长度 | 超长输出可能截断 | 检查 `output` 完整性 |
+| Limitation | Workaround |
+|------------|------------|
+| Requires network | Cannot work offline |
+| New anime delay | Latest characters may not be in databases |
+| Niche characters | Use `--anime` to improve match rate |
+| No Chinese API | Query uses Japanese/English names |
 
 ## Requirements
 
 - Python 3.10+
 - requests library
-- Internet connection (for API queries)
+- Internet connection
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT License
 
-## Contributing
+## Changelog
 
-Pull requests welcome! Please ensure:
-1. Code follows existing style
-2. Tests pass (if applicable)
-3. Documentation updated
+### v2.3 (2026-03-02)
+- **Idempotent merge**: Same character won't be added twice
+- **Cross-source scoring**: AniList + Jikan consistency validation
+- **Exit codes**: Standardized error codes for script integration
+- **Force selection**: Manual selection required when top matches are close
 
-## Acknowledgments
+### v2.1
+- Forced disambiguation mode
+- Semantic validation (9 checks)
 
-- Data sources: [AniList](https://anilist.co), [Jikan](https://jikan.moe)
-- Inspired by OpenClaw agent memory systems
-- Built for anime character roleplay communities
+### v2.0
+- Multi-source query
+- Atomic write with rollback
 
 ---
-
-## 🔗 Quick Links
-
-⭐ Star this repo: https://github.com/colinchen4/anime-character-loader support us at anchormind-ai.com
-🤖 OpenClaw: https://openclaw.ai
-🐦 Follow updates: @Clawra_chenDaily
 
 Made with 🐾 by Clawra

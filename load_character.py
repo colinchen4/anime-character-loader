@@ -21,8 +21,45 @@ import hashlib
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass, asdict
-from enum import Enum
+from enum import Enum, IntEnum
 import sqlite3
+
+
+# ============== 退出码定义 ==============
+class ExitCode(IntEnum):
+    """标准化退出码 - 脚本可识别"""
+    SUCCESS = 0
+    NETWORK_ERROR = 10      # 网络/API错误
+    DATA_ERROR = 20         # 数据/查询错误（无匹配、消歧失败）
+    VALIDATION_ERROR = 30   # 验证失败
+    FILE_ERROR = 40         # 文件操作错误
+
+
+# ============== 错误分类异常 ==============
+class CharacterLoaderError(Exception):
+    """基础异常类"""
+    exit_code = ExitCode.DATA_ERROR
+    
+    def __init__(self, message: str, details: Dict = None):
+        super().__init__(message)
+        self.message = message
+        self.details = details or {}
+
+class NetworkError(CharacterLoaderError):
+    """网络/API错误"""
+    exit_code = ExitCode.NETWORK_ERROR
+
+class DataError(CharacterLoaderError):
+    """数据错误（无匹配、消歧失败）"""
+    exit_code = ExitCode.DATA_ERROR
+
+class ValidationError(CharacterLoaderError):
+    """验证失败"""
+    exit_code = ExitCode.VALIDATION_ERROR
+
+class FileError(CharacterLoaderError):
+    """文件操作错误"""
+    exit_code = ExitCode.FILE_ERROR
 
 try:
     import requests
@@ -130,6 +167,18 @@ class CharacterMatch:
     confidence: float
     data: Dict[str, Any]
     disambiguation_note: str = ""
+    cross_source_consistency: float = 0.0  # 跨源一致性评分
+
+
+@dataclass
+class CrossSourceMatch:
+    """跨源匹配聚合结果"""
+    character_name: str
+    source_work: str
+    anilist_match: Optional[CharacterMatch]
+    jikan_match: Optional[CharacterMatch]
+    consistency_score: float  # 0-1, 1表示两源完全一致
+    combined_confidence: float
 
 
 @dataclass
@@ -199,6 +248,7 @@ class APIClient:
             print(f"  📦 Cache hit for {url[:50]}...")
             return cached
         
+        last_error = None
         for attempt in range(MAX_RETRIES):
             try:
                 time.sleep(RATE_LIMIT_DELAY)  # 限流
@@ -216,15 +266,21 @@ class APIClient:
                 return data
                 
             except requests.exceptions.RequestException as e:
+                last_error = e
                 print(f"  ⚠️ Attempt {attempt + 1}/{MAX_RETRIES} failed: {e}")
                 if attempt < MAX_RETRIES - 1:
                     time.sleep(RETRY_DELAY * (attempt + 1))
                 else:
-                    print(f"  ❌ Max retries reached for {url}")
-                    return None
+                    raise NetworkError(f"API request failed after {MAX_RETRIES} attempts", {
+                        "url": url,
+                        "method": method,
+                        "error": str(e)
+                    })
             except json.JSONDecodeError as e:
-                print(f"  ❌ JSON parse error: {e}")
-                return None
+                raise NetworkError(f"JSON parse error from {url}", {
+                    "url": url,
+                    "error": str(e)
+                })
         
         return None
 
@@ -364,8 +420,120 @@ class WikiaSource:
 class CharacterLoader:
     """角色加载器主类"""
     
+    # 强制用户选择的分数差距阈值
+    FORCE_SELECTION_THRESHOLD = 0.15
+    
     def __init__(self):
         self.sources = [AniListSource, JikanSource]
+    
+    def calculate_cross_source_consistency(self, matches: List[CharacterMatch]) -> List[CrossSourceMatch]:
+        """
+        计算跨源一致性评分
+        返回按综合置信度排序的聚合匹配结果
+        """
+        # 按角色名+作品分组
+        match_groups: Dict[str, List[CharacterMatch]] = {}
+        
+        for match in matches:
+            # 标准化键：角色名（小写）+ 作品名（小写，取前20字符）
+            work_prefix = match.source_work.lower()[:20] if match.source_work else "unknown"
+            key = f"{match.name.lower()}|{work_prefix}"
+            
+            if key not in match_groups:
+                match_groups[key] = []
+            match_groups[key].append(match)
+        
+        # 为每组计算一致性
+        cross_matches = []
+        for key, group in match_groups.items():
+            anilist = next((m for m in group if m.source == "AniList"), None)
+            jikan = next((m for m in group if m.source == "Jikan"), None)
+            
+            # 计算一致性分数
+            if anilist and jikan:
+                # 两源都有：检查名字相似度和作品一致性
+                name_match = self._name_similarity(anilist.name, jikan.name)
+                work_match = self._work_similarity(anilist.source_work, jikan.source_work)
+                consistency = (name_match + work_match) / 2
+                
+                # 综合置信度 = 加权平均 + 一致性奖励
+                base_confidence = (anilist.confidence * 0.5 + jikan.confidence * 0.3)
+                consistency_bonus = consistency * 0.2
+                combined = min(1.0, base_confidence + consistency_bonus)
+            elif anilist:
+                consistency = 0.5  # 单源，中等一致性
+                combined = anilist.confidence * 0.8  # 单源打折
+            elif jikan:
+                consistency = 0.5
+                combined = jikan.confidence * 0.7  # Jikan权重较低
+            else:
+                continue
+            
+            cross_match = CrossSourceMatch(
+                character_name=group[0].name,
+                source_work=group[0].source_work,
+                anilist_match=anilist,
+                jikan_match=jikan,
+                consistency_score=consistency,
+                combined_confidence=combined
+            )
+            cross_matches.append(cross_match)
+        
+        # 按综合置信度排序
+        cross_matches.sort(key=lambda x: x.combined_confidence, reverse=True)
+        return cross_matches
+    
+    def _name_similarity(self, name1: str, name2: str) -> float:
+        """计算两个名字相似度 (0-1)"""
+        if not name1 or not name2:
+            return 0.0
+        
+        n1, n2 = name1.lower(), name2.lower()
+        
+        # 完全匹配
+        if n1 == n2:
+            return 1.0
+        
+        # 互相包含
+        if n1 in n2 or n2 in n1:
+            return 0.9
+        
+        # 计算词重叠
+        words1 = set(n1.split())
+        words2 = set(n2.split())
+        
+        if not words1 or not words2:
+            return 0.0
+        
+        intersection = words1 & words2
+        union = words1 | words2
+        
+        return len(intersection) / len(union) if union else 0.0
+    
+    def _work_similarity(self, work1: str, work2: str) -> float:
+        """计算两个作品名相似度 (0-1)"""
+        if not work1 or not work2:
+            return 0.0
+        
+        w1, w2 = work1.lower(), work2.lower()
+        
+        # 完全匹配
+        if w1 == w2:
+            return 1.0
+        
+        # 互相包含（处理作品名变体）
+        if w1 in w2 or w2 in w1:
+            return 0.95
+        
+        # 关键词匹配（去除常见词）
+        stop_words = {'the', 'a', 'an', 'no', 'wa', 'no', 'sodatekata', 'monogatari'}
+        words1 = set(w.split(':')[0].split()[0] for w in [w1] if w)
+        words2 = set(w.split(':')[0].split()[0] for w in [w2] if w)
+        
+        if words1 & words2:
+            return 0.8
+        
+        return 0.0
     
     def translate_name(self, name: str) -> Tuple[str, str]:
         """翻译中文名，返回 (英文名, 作品名)"""
@@ -421,67 +589,109 @@ class CharacterLoader:
     
     def disambiguate(self, matches: List[CharacterMatch], user_hint: str = "", 
                      force_hint: bool = True, original_query: str = "") -> Optional[CharacterMatch]:
-        """角色消歧 - 强制模式：无提示时更严格"""
+        """
+        角色消歧 v2.3 - 增强版
+        - 使用跨源一致性评分
+        - 分数接近时强制用户选择
+        """
         if not matches:
-            return None
+            raise DataError("No matches found", {"query": original_query})
         
-        # 单匹配情况
-        if len(matches) == 1:
-            match = matches[0]
-            # 检查是否是模糊名字（强制消歧加强）
-            is_ambiguous = self.is_ambiguous_name(match.name) or self.is_ambiguous_name(original_query)
-            
-            if force_hint and not user_hint and is_ambiguous:
-                print(f"\n⚠️ Ambiguous name detected: '{match.name}'")
-                print(f"   This is a common name that appears in multiple works.")
-                print(f"   Source: {match.source_work}")
-                print(f"   💡 Use --anime '{match.source_work}' to confirm")
-                return None
-            
-            # 强制消歧：即使是单匹配，无提示且置信度不够高也需要确认
-            if force_hint and not user_hint and match.confidence < CONFIDENCE_THRESHOLD_HIGH:
-                print(f"\n⚠️ Single match but low confidence without anime hint: {match.name} ({match.confidence:.2f})")
-                print(f"   Source: {match.source_work}")
-                print(f"   💡 Use --anime '{match.source_work}' to confirm")
-                return None
-            
-            if match.confidence >= CONFIDENCE_THRESHOLD_LOW:
-                return match
-            else:
-                print(f"\n⚠️ Low confidence match: {match.name} ({match.confidence:.2f})")
-                return None
+        # 计算跨源一致性评分
+        cross_matches = self.calculate_cross_source_consistency(matches)
         
-        # 多个匹配，需要消歧
-        print(f"\n⚠️ Multiple matches found ({len(matches)}):")
-        for i, match in enumerate(matches[:5], 1):
-            print(f"  {i}. {match.name} from {match.source_work}")
-            print(f"     Source: {match.source}, Confidence: {match.confidence:.2f}")
+        if not cross_matches:
+            raise DataError("No valid matches after cross-source validation", {"query": original_query})
+        
+        # 显示所有选项（带一致性评分）
+        print(f"\n⚠️ Multiple potential matches found ({len(cross_matches)}):")
+        print(f"   {'Rank':<6} {'Name':<25} {'Source Work':<30} {'Confidence':<12} {'Consistency':<12}")
+        print(f"   {'-'*85}")
+        
+        for i, cm in enumerate(cross_matches[:5], 1):
+            sources = []
+            if cm.anilist_match:
+                sources.append("AniList")
+            if cm.jikan_match:
+                sources.append("Jikan")
+            source_str = "+".join(sources)
+            
+            print(f"   [{i}]    {cm.character_name:<25} {cm.source_work[:29]:<30} "
+                  f"{cm.combined_confidence:.2f}       {cm.consistency_score:.2f}")
+            print(f"        Sources: {source_str}")
         
         # 如果有用户提示，尝试匹配
         if user_hint:
-            for match in matches:
-                if user_hint.lower() in match.source_work.lower():
-                    print(f"\n✅ Auto-selected based on hint: {match.name}")
-                    return match
-            # 提示匹配失败
+            hint_lower = user_hint.lower()
+            for cm in cross_matches:
+                if hint_lower in cm.source_work.lower():
+                    print(f"\n✅ Auto-selected based on hint: {cm.character_name}")
+                    return self._select_best_source_match(cm)
             print(f"\n⚠️ Hint '{user_hint}' didn't match any source work")
         
-        # 强制消歧模式：无提示时必须人工选择
-        if force_hint and not user_hint:
-            print(f"\n❌ Force disambiguation enabled: --anime hint required")
-            print(f"   Examples:")
-            for match in matches[:3]:
-                print(f"     --anime '{match.source_work}'")
-            return None
+        # 强制消歧模式检查
+        is_ambiguous = self.is_ambiguous_name(original_query)
         
-        # 高置信度优先（仅在非强制模式或已有提示时）
-        high_conf = [m for m in matches if m.confidence >= CONFIDENCE_THRESHOLD_HIGH]
-        if len(high_conf) == 1:
-            print(f"\n✅ Auto-selected high confidence match: {high_conf[0].name}")
-            return high_conf[0]
+        if force_hint and not user_hint and is_ambiguous:
+            print(f"\n❌ Ambiguous name '{original_query}' requires --anime hint")
+            print(f"   This name appears in multiple anime. Please specify:")
+            for cm in cross_matches[:3]:
+                print(f"     --anime '{cm.source_work}'")
+            raise DataError(f"Ambiguous name requires --anime hint", {
+                "query": original_query,
+                "options": [cm.source_work for cm in cross_matches[:3]]
+            })
         
-        # 需要人工选择
-        return None
+        # 检查顶部两个匹配的分数差距
+        if len(cross_matches) >= 2:
+            top1, top2 = cross_matches[0], cross_matches[1]
+            score_gap = top1.combined_confidence - top2.combined_confidence
+            
+            if score_gap < self.FORCE_SELECTION_THRESHOLD:
+                # 分数太接近，必须人工选择
+                print(f"\n⚠️ Top matches have similar scores (gap: {score_gap:.2f} < {self.FORCE_SELECTION_THRESHOLD})")
+                print(f"   Cannot auto-select. Please use --select <number>:")
+                for i, cm in enumerate(cross_matches[:3], 1):
+                    print(f"     --select {i}  # {cm.character_name} from {cm.source_work}")
+                raise DataError("Top matches too close in score, manual selection required", {
+                    "top_matches": [
+                        {"rank": i+1, "name": cm.character_name, "work": cm.source_work, 
+                         "confidence": cm.combined_confidence}
+                        for i, cm in enumerate(cross_matches[:2])
+                    ],
+                    "score_gap": score_gap
+                })
+        
+        # 单匹配或分数差距足够大
+        best = cross_matches[0]
+        
+        # 检查最低置信度
+        if best.combined_confidence < CONFIDENCE_THRESHOLD_LOW:
+            print(f"\n⚠️ Best match has low confidence: {best.combined_confidence:.2f}")
+            raise DataError("Best match below confidence threshold", {
+                "confidence": best.combined_confidence,
+                "threshold": CONFIDENCE_THRESHOLD_LOW
+            })
+        
+        print(f"\n✅ Auto-selected: {best.character_name} (confidence: {best.combined_confidence:.2f})")
+        return self._select_best_source_match(best)
+    
+    def _select_best_source_match(self, cross_match: CrossSourceMatch) -> CharacterMatch:
+        """从CrossSourceMatch中选择最佳的数据源匹配"""
+        # 优先AniList（数据更完整）
+        if cross_match.anilist_match:
+            match = cross_match.anilist_match
+            match.cross_source_consistency = cross_match.consistency_score
+            match.confidence = cross_match.combined_confidence
+            return match
+        
+        if cross_match.jikan_match:
+            match = cross_match.jikan_match
+            match.cross_source_consistency = cross_match.consistency_score
+            match.confidence = cross_match.combined_confidence
+            return match
+        
+        raise DataError("No valid source match found")
     
     def generate_soul(self, match: CharacterMatch) -> str:
         """生成 SOUL.md"""
@@ -732,8 +942,21 @@ class CharacterLoader:
 
 
 # ============== 文件操作 ==============
+@dataclass
+class CharacterSection:
+    """角色章节数据"""
+    character_name: str
+    source_work: str
+    identity: str
+    personality: str
+    speaking_style: str
+    boundaries: str
+    original_content: str
+    section_hash: str  # 用于检测重复
+
+
 class FileManager:
-    """文件管理（支持回滚）"""
+    """文件管理（支持回滚、幂等合并）"""
     
     TEMP_DIR = os.path.join(CACHE_DIR, "temp")
     
@@ -752,12 +975,6 @@ class FileManager:
     def generate_final_path(cls, character_name: str, output_dir: str) -> str:
         """生成最终文件路径 - 使用 SOUL.generated.md 约定"""
         return os.path.join(output_dir, "SOUL.generated.md")
-    
-    @classmethod
-    def generate_character_path(cls, character_name: str, output_dir: str) -> str:
-        """生成角色专用文件路径 - 用于多角色模式"""
-        safe_name = re.sub(r'[^\w\s-]', '', character_name).strip().replace(' ', '_')
-        return os.path.join(output_dir, f"{safe_name}_SOUL.md")
     
     @classmethod
     def write_temp(cls, content: str, character_name: str) -> str:
@@ -788,87 +1005,215 @@ class FileManager:
             print(f"  🗑️  Rolled back temp file: {temp_path}")
     
     @classmethod
-    def structured_merge(cls, generated_path: str, existing_path: str, character_name: str) -> str:
-        """结构化合并：将生成的角色内容合并到现有 SOUL.md"""
+    def parse_character_section(cls, content: str) -> Optional[CharacterSection]:
+        """解析角色章节内容"""
+        # 提取角色名（从标题）
+        title_match = re.search(r'^# (.+)$', content, re.MULTILINE)
+        if not title_match:
+            return None
         
-        # 读取现有 SOUL.md
-        with open(existing_path, 'r', encoding='utf-8') as f:
-            existing_content = f.read()
+        character_name = title_match.group(1).strip()
         
+        # 提取作品名
+        source_match = re.search(r'\*\*Source:\*\*\s*(.+)$', content, re.MULTILINE)
+        source_work = source_match.group(1).strip() if source_match else "Unknown"
+        
+        # 提取各章节
+        identity = cls._extract_section(content, "Identity")
+        personality = cls._extract_section(content, "Personality")
+        speaking_style = cls._extract_section(content, "Speaking Style")
+        boundaries = cls._extract_section(content, "Boundaries")
+        
+        # 生成哈希用于重复检测
+        content_hash = hashlib.md5(
+            f"{character_name}|{source_work}|{identity[:100]}|{personality[:100]}".encode()
+        ).hexdigest()[:16]
+        
+        return CharacterSection(
+            character_name=character_name,
+            source_work=source_work,
+            identity=identity,
+            personality=personality,
+            speaking_style=speaking_style,
+            boundaries=boundaries,
+            original_content=content,
+            section_hash=content_hash
+        )
+    
+    @classmethod
+    def parse_existing_characters(cls, content: str) -> Dict[str, CharacterSection]:
+        """
+        解析现有SOUL.md中的所有角色章节
+        返回: {角色名+作品: CharacterSection}
+        """
+        characters = {}
+        
+        # 分割多个角色（按二级标题）
+        # 模式: ## Character Name 或 # Character Name
+        sections = re.split(r'\n(?=## [^#])', content)
+        
+        for section in sections:
+            section = section.strip()
+            if not section:
+                continue
+            
+            char_sec = cls.parse_character_section(section)
+            if char_sec:
+                # 键格式: 角色名|作品名前缀
+                key = f"{char_sec.character_name.lower()}|{char_sec.source_work.lower()[:20]}"
+                characters[key] = char_sec
+        
+        return characters
+    
+    @classmethod
+    def structured_merge(cls, generated_path: str, existing_path: str, 
+                         character_name: str, source_work: str = "") -> str:
+        """
+        结构化合并 v2.3 - 幂等性保证
+        - 基于角色名+作品检测重复
+        - 重复时更新而非追加
+        - 原子写入防损坏
+        """
         # 读取生成的内容
         with open(generated_path, 'r', encoding='utf-8') as f:
             generated_content = f.read()
         
-        # 提取生成的角色核心信息
-        char_identity = cls._extract_section(generated_content, "Identity")
-        char_personality = cls._extract_section(generated_content, "Personality")
-        char_speaking = cls._extract_section(generated_content, "Speaking Style")
-        char_boundaries = cls._extract_section(generated_content, "Boundaries")
+        # 解析生成的角色
+        new_char = cls.parse_character_section(generated_content)
+        if not new_char:
+            raise FileError("Failed to parse generated character content")
+        
+        # 使用提供的source_work（更可靠）
+        if source_work:
+            new_char.source_work = source_work
+        
+        new_key = f"{new_char.character_name.lower()}|{new_char.source_work.lower()[:20]}"
+        
+        # 读取现有内容
+        existing_content = ""
+        if os.path.exists(existing_path):
+            with open(existing_path, 'r', encoding='utf-8') as f:
+                existing_content = f.read()
+        
+        # 解析现有角色
+        existing_chars = cls.parse_existing_characters(existing_content)
+        
+        # 检查重复（幂等性）
+        if new_key in existing_chars:
+            existing = existing_chars[new_key]
+            if existing.section_hash == new_char.section_hash:
+                print(f"  ⚠️ Character '{character_name}' already exists with identical content")
+                print(f"  ✅ Skipping (idempotent merge)")
+                return existing_path
+            else:
+                print(f"  🔄 Updating existing character '{character_name}' from {new_char.source_work}")
+                # 移除旧版本
+                del existing_chars[new_key]
+        else:
+            print(f"  ➕ Adding new character '{character_name}' from {new_char.source_work}")
         
         # 构建合并后的内容
-        merged_lines = []
+        merged_content = cls._build_merged_content(existing_chars, new_char)
         
-        # 保留现有文件的头部（如果有）
-        if existing_content.strip():
-            merged_lines.append(existing_content.rstrip())
-            merged_lines.append("\n\n")
-            merged_lines.append("---")
-            merged_lines.append(f"\n\n# Additional Character: {character_name}\n")
-        else:
-            merged_lines.append(f"# Multi-Character SOUL\n")
+        # 原子写入（先写临时文件，再重命名）
+        temp_output = f"{existing_path}.tmp.{datetime.now().strftime('%Y%m%d%H%M%S')}"
         
-        # 添加角色身份（简化版）
-        if char_identity:
-            merged_lines.append("\n## Identity")
-            merged_lines.append(f"\n{char_identity}\n")
-        
-        # 添加性格特征
-        if char_personality:
-            merged_lines.append("\n## Personality Traits")
-            merged_lines.append(f"\n{char_personality}\n")
-        
-        # 添加说话风格
-        if char_speaking:
-            merged_lines.append("\n## Speaking Style")
-            merged_lines.append(f"\n{char_speaking}\n")
-        
-        # 添加边界
-        if char_boundaries:
-            merged_lines.append("\n## Boundaries")
-            merged_lines.append(f"\n{char_boundaries}\n")
-        
-        # 添加来源标记
-        merged_lines.append("\n---")
-        merged_lines.append(f"\n*Character '{character_name}' merged on {datetime.now().strftime('%Y-%m-%d')}*")
-        
-        merged_content = "\n".join(merged_lines)
-        
-        # 备份并写入
-        backup_path = f"{existing_path}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        os.rename(existing_path, backup_path)
-        
-        with open(existing_path, 'w', encoding='utf-8') as f:
-            f.write(merged_content)
-        
-        print(f"  📦 Backed up existing SOUL.md to: {backup_path}")
-        print(f"  ✅ Merged character '{character_name}' into: {existing_path}")
+        try:
+            # 备份现有文件
+            if os.path.exists(existing_path):
+                backup_path = f"{existing_path}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                os.rename(existing_path, backup_path)
+                print(f"  📦 Backed up to: {os.path.basename(backup_path)}")
+            
+            # 写入临时文件
+            with open(temp_output, 'w', encoding='utf-8') as f:
+                f.write(merged_content)
+            
+            # 原子重命名
+            os.rename(temp_output, existing_path)
+            print(f"  ✅ Merged into: {existing_path}")
+            
+            # 清理临时文件
+            if os.path.exists(temp_output):
+                os.remove(temp_output)
+                
+        except Exception as e:
+            # 回滚
+            if os.path.exists(temp_output):
+                os.remove(temp_output)
+            raise FileError(f"Merge failed: {e}", {"path": existing_path})
         
         return existing_path
     
     @classmethod
+    def _build_merged_content(cls, existing_chars: Dict[str, CharacterSection], 
+                              new_char: CharacterSection) -> str:
+        """构建合并后的内容"""
+        lines = ["# Multi-Character SOUL\n"]
+        
+        # 添加所有现有角色（保持原有顺序）
+        for key, char_sec in existing_chars.items():
+            lines.append(f"\n## {char_sec.character_name}\n")
+            lines.append(f"**Source:** {char_sec.source_work}\n")
+            
+            if char_sec.identity:
+                lines.extend(["\n### Identity", char_sec.identity])
+            if char_sec.personality:
+                lines.extend(["\n### Personality", char_sec.personality])
+            if char_sec.speaking_style:
+                lines.extend(["\n### Speaking Style", char_sec.speaking_style])
+            if char_sec.boundaries:
+                lines.extend(["\n### Boundaries", char_sec.boundaries])
+            
+            lines.append(f"\n*Hash: {char_sec.section_hash}*\n")
+        
+        # 添加新角色
+        lines.append(f"\n## {new_char.character_name}\n")
+        lines.append(f"**Source:** {new_char.source_work}\n")
+        
+        if new_char.identity:
+            lines.extend(["\n### Identity", new_char.identity])
+        if new_char.personality:
+            lines.extend(["\n### Personality", new_char.personality])
+        if new_char.speaking_style:
+            lines.extend(["\n### Speaking Style", new_char.speaking_style])
+        if new_char.boundaries:
+            lines.extend(["\n### Boundaries", new_char.boundaries])
+        
+        lines.append(f"\n*Hash: {new_char.section_hash}*\n")
+        
+        # 添加角色选择指南
+        all_chars = list(existing_chars.values()) + [new_char]
+        if len(all_chars) > 1:
+            lines.extend([
+                "\n---\n",
+                "## Character Selection Guide\n",
+                "When multiple characters are present, select based on context:\n"
+            ])
+            
+            for char in all_chars:
+                lines.append(f"- **{char.character_name}** ({char.source_work})")
+        
+        lines.append(f"\n---\n*Generated by anime-character-loader v2.3 on {datetime.now().strftime('%Y-%m-%d')}*\n")
+        
+        return "\n".join(lines)
+    
+    @classmethod
     def _extract_section(cls, content: str, section_name: str) -> str:
         """提取特定章节内容"""
-        pattern = rf'## {re.escape(section_name)}\s*\n\n(.+?)(?=\n## |\Z)'
-        match = re.search(pattern, content, re.DOTALL)
-        if match:
-            return match.group(1).strip()
+        # 支持 ### 和 ## 两种层级
+        for prefix in ["###", "##"]:
+            pattern = rf'{prefix} {re.escape(section_name)}\s*\n\n?(.+?)(?=\n#{1,3} |\Z)'
+            match = re.search(pattern, content, re.DOTALL)
+            if match:
+                return match.group(1).strip()
         return ""
 
 
 # ============== CLI ==============
 def main():
     parser = argparse.ArgumentParser(
-        description="Anime Character Loader v2.0 - Multi-source character data with validation"
+        description="Anime Character Loader v2.3 - Multi-source character data with validation"
     )
     parser.add_argument("name", help="Character name (EN/JP/CN)")
     parser.add_argument("--anime", "-a", help="Anime/manga name hint for disambiguation")
@@ -880,179 +1225,208 @@ def main():
     args = parser.parse_args()
     
     print(f"\n{'='*60}")
-    print("🎭 Anime Character Loader v2.0")
+    print("🎭 Anime Character Loader v2.3")
     print(f"{'='*60}")
     
     loader = CharacterLoader()
     
-    # 1. 翻译名称
-    translated_name, anime_hint = loader.translate_name(args.name)
-    if translated_name != args.name:
-        print(f"\n📝 Name translation: '{args.name}' → '{translated_name}'")
-    
-    # 使用命令行提示或翻译得到的作品名
-    hint = args.anime or anime_hint
-    if hint:
-        print(f"🎬 Anime hint: {hint}")
-    
-    # 2. 多源查询
-    matches = loader.query_multi_source(translated_name, hint)
-    
-    if not matches:
-        print("\n❌ No matches found")
-        print("\n💡 Suggestions:")
-        print("- Try English or Japanese name")
-        print("- Check spelling")
-        print("- Use --anime to specify source work")
-        sys.exit(1)
-    
-    # 3. 消歧（强制模式：必须有 --anime 提示或 --select）
-    if args.select and 1 <= args.select <= len(matches):
-        selected = matches[args.select - 1]
-        print(f"\n✅ User selected: {selected.name}")
-    else:
-        selected = loader.disambiguate(matches, hint, force_hint=FORCE_DISAMBIGUATION, original_query=args.name)
-    
-    if not selected:
-        print("\n⚠️ Cannot auto-select. Please use --select <number> to choose:")
-        for i, match in enumerate(matches[:5], 1):
-            print(f"  {i}. {match.name} ({match.source_work})")
-        sys.exit(1)
-    
-    # 4. 置信度检查
-    if selected.confidence < CONFIDENCE_THRESHOLD_LOW and not args.force:
-        print(f"\n⚠️ Low confidence ({selected.confidence:.2f}). Use --force to generate anyway.")
-        sys.exit(1)
-    
-    # 显示信息模式
-    if args.info:
-        print(f"\n{'='*60}")
-        print("CHARACTER INFO")
-        print(f"{'='*60}")
-        print(f"Name: {selected.name}")
-        print(f"Source: {selected.source_work}")
-        print(f"Confidence: {selected.confidence:.2f}")
-        print(f"Data source: {selected.source}")
-        print(f"\nDescription preview:")
-        desc = loader._clean_description(selected.data.get("description", ""))
-        print(desc[:500] + "..." if len(desc) > 500 else desc)
-        return
-    
-    # 5. 生成 SOUL.md
-    print(f"\n📝 Generating SOUL.md...")
-    content = loader.generate_soul(selected)
-    
-    # 6. 验证
-    print("\n🔍 Validating...")
-    validation = loader.validate_soul(content, selected.data)
-    
-    print(f"\n{'='*60}")
-    print("VALIDATION REPORT")
-    print(f"{'='*60}")
-    print(f"Overall Score: {validation.score:.1f}/100")
-    print(f"Status: {'✅ PASSED' if validation.passed else '❌ FAILED'}")
-    print()
-    
-    for check_name, (passed, description) in validation.checks.items():
-        status = "✅" if passed else "❌"
-        print(f"  {status} {check_name}: {description}")
-    
-    if validation.errors:
-        print(f"\n⚠️ Errors:")
-        for error in validation.errors:
-            print(f"  - {error}")
-    
-    # 7. 写入临时文件
-    temp_path = FileManager.write_temp(content, selected.name)
-    print(f"\n📄 Temp file: {temp_path}")
-    
-    # 8. 验证通过后提交
-    if validation.passed or args.force:
-        final_path = FileManager.generate_final_path(selected.name, args.output)
-        final_path = FileManager.commit(temp_path, final_path)
-        print(f"✅ Final file: {final_path}")
+    try:
+        # 1. 翻译名称
+        translated_name, anime_hint = loader.translate_name(args.name)
+        if translated_name != args.name:
+            print(f"\n📝 Name translation: '{args.name}' → '{translated_name}'")
         
-        # 显示预览
-        print(f"\n{'='*60}")
-        print("PREVIEW")
-        print(f"{'='*60}")
-        preview = content[:1000] + "..." if len(content) > 1000 else content
-        print(preview)
+        # 使用命令行提示或翻译得到的作品名
+        hint = args.anime or anime_hint
+        if hint:
+            print(f"🎬 Anime hint: {hint}")
         
-        # 9. 询问加载方式
-        print(f"\n{'='*60}")
-        print("📋 LOADING OPTIONS")
-        print(f"{'='*60}")
-        print(f"\nCharacter: {selected.name}")
-        print(f"File: {final_path}")
+        # 2. 多源查询
+        matches = loader.query_multi_source(translated_name, hint)
         
-        # 检查是否已有 SOUL.md
-        existing_soul = os.path.join(args.output, "SOUL.md")
-        has_existing = os.path.exists(existing_soul)
+        if not matches:
+            raise DataError("No matches found", {
+                "query": args.name,
+                "translated": translated_name,
+                "suggestions": ["Try English or Japanese name", "Check spelling", "Use --anime to specify source work"]
+            })
         
-        if has_existing:
-            print(f"\n⚠️  Existing SOUL.md found: {existing_soul}")
-        
-        print(f"\nHow would you like to load this character?")
-        print(f"\n  [1] REPLACE - Replace existing SOUL.md with this character")
-        if has_existing:
-            print(f"      (Will backup existing SOUL.md first)")
-        else:
-            print(f"      cp {final_path} ./SOUL.md")
-        
-        print(f"\n  [2] MERGE - Structured merge into existing SOUL.md")
-        if has_existing:
-            print(f"      (Preserves existing content, adds character sections)")
-        else:
-            print(f"      (No existing SOUL.md, will create new)")
-        
-        print(f"\n  [3] KEEP - Keep as SOUL.generated.md for manual review")
-        print(f"      (No changes to existing files)")
-        
-        # 在非交互式环境中默认选择 KEEP
-        try:
-            choice = input(f"\nEnter choice [1/2/3] (default: 3): ").strip() or "3"
-        except (EOFError, KeyboardInterrupt):
-            choice = "3"
-            print("\n(non-interactive mode, defaulting to KEEP)")
-        
-        if choice == "1":
-            # REPLACE
-            target_path = os.path.join(args.output, "SOUL.md")
-            if os.path.exists(target_path):
-                backup_path = f"{target_path}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                os.rename(target_path, backup_path)
-                print(f"\n  📦 Backed up existing SOUL.md to: {backup_path}")
-            
-            import shutil
-            shutil.copy2(final_path, target_path)
-            print(f"  ✅ Replaced: {target_path}")
-            
-        elif choice == "2":
-            # MERGE
-            target_path = os.path.join(args.output, "SOUL.md")
-            if os.path.exists(target_path):
-                FileManager.structured_merge(final_path, target_path, selected.name)
+        # 3. 消歧（增强版：使用跨源一致性评分）
+        if args.select and args.select >= 1:
+            # 先计算跨源匹配
+            cross_matches = loader.calculate_cross_source_consistency(matches)
+            if args.select <= len(cross_matches):
+                selected = loader._select_best_source_match(cross_matches[args.select - 1])
+                print(f"\n✅ User selected: {selected.name}")
             else:
-                # 没有现有文件，直接复制
-                import shutil
+                raise DataError(f"Invalid selection {args.select}, only {len(cross_matches)} options available")
+        else:
+            selected = loader.disambiguate(matches, hint, force_hint=FORCE_DISAMBIGUATION, original_query=args.name)
+        
+        # 4. 置信度检查
+        if selected.confidence < CONFIDENCE_THRESHOLD_LOW and not args.force:
+            raise DataError(f"Low confidence match: {selected.confidence:.2f}", {
+                "confidence": selected.confidence,
+                "threshold": CONFIDENCE_THRESHOLD_LOW,
+                "suggestion": "Use --force to generate anyway"
+            })
+        
+        # 显示信息模式
+        if args.info:
+            print(f"\n{'='*60}")
+            print("CHARACTER INFO")
+            print(f"{'='*60}")
+            print(f"Name: {selected.name}")
+            print(f"Source: {selected.source_work}")
+            print(f"Confidence: {selected.confidence:.2f}")
+            print(f"Cross-source consistency: {selected.cross_source_consistency:.2f}")
+            print(f"Data source: {selected.source}")
+            print(f"\nDescription preview:")
+            desc = loader._clean_description(selected.data.get("description", ""))
+            print(desc[:500] + "..." if len(desc) > 500 else desc)
+            return
+        
+        # 5. 生成 SOUL.md
+        print(f"\n📝 Generating SOUL.md...")
+        content = loader.generate_soul(selected)
+        
+        # 6. 验证
+        print("\n🔍 Validating...")
+        validation = loader.validate_soul(content, selected.data)
+        
+        print(f"\n{'='*60}")
+        print("VALIDATION REPORT")
+        print(f"{'='*60}")
+        print(f"Overall Score: {validation.score:.1f}/100")
+        print(f"Status: {'✅ PASSED' if validation.passed else '❌ FAILED'}")
+        print()
+        
+        for check_name, (passed, description) in validation.checks.items():
+            status = "✅" if passed else "❌"
+            print(f"  {status} {check_name}: {description}")
+        
+        if validation.errors:
+            print(f"\n⚠️ Errors:")
+            for error in validation.errors:
+                print(f"  - {error}")
+        
+        # 7. 写入临时文件
+        temp_path = FileManager.write_temp(content, selected.name)
+        print(f"\n📄 Temp file: {temp_path}")
+        
+        # 8. 验证通过后提交
+        if validation.passed or args.force:
+            final_path = FileManager.generate_final_path(selected.name, args.output)
+            final_path = FileManager.commit(temp_path, final_path)
+            print(f"✅ Final file: {final_path}")
+            
+            # 显示预览
+            print(f"\n{'='*60}")
+            print("PREVIEW")
+            print(f"{'='*60}")
+            preview = content[:1000] + "..." if len(content) > 1000 else content
+            print(preview)
+            
+            # 9. 询问加载方式
+            print(f"\n{'='*60}")
+            print("📋 LOADING OPTIONS")
+            print(f"{'='*60}")
+            print(f"\nCharacter: {selected.name}")
+            print(f"Source: {selected.source_work}")
+            print(f"File: {final_path}")
+            
+            # 检查是否已有 SOUL.md
+            existing_soul = os.path.join(args.output, "SOUL.md")
+            has_existing = os.path.exists(existing_soul)
+            
+            if has_existing:
+                print(f"\n⚠️  Existing SOUL.md found: {existing_soul}")
+            
+            print(f"\nHow would you like to load this character?")
+            print(f"\n  [1] REPLACE - Replace existing SOUL.md with this character")
+            if has_existing:
+                print(f"      (Will backup existing SOUL.md first)")
+            else:
+                print(f"      cp {final_path} ./SOUL.md")
+            
+            print(f"\n  [2] MERGE - Structured merge into existing SOUL.md")
+            if has_existing:
+                print(f"      (Preserves existing content, adds character sections)")
+            else:
+                print(f"      (No existing SOUL.md, will create new)")
+            
+            print(f"\n  [3] KEEP - Keep as SOUL.generated.md for manual review")
+            print(f"      (No changes to existing files)")
+            
+            # 在非交互式环境中默认选择 KEEP
+            try:
+                choice = input(f"\nEnter choice [1/2/3] (default: 3): ").strip() or "3"
+            except (EOFError, KeyboardInterrupt):
+                choice = "3"
+                print("\n(non-interactive mode, defaulting to KEEP)")
+            
+            if choice == "1":
+                # REPLACE
+                target_path = os.path.join(args.output, "SOUL.md")
+                if os.path.exists(target_path):
+                    backup_path = f"{target_path}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                    os.rename(target_path, backup_path)
+                    print(f"\n  📦 Backed up existing SOUL.md to: {backup_path}")
+                
                 shutil.copy2(final_path, target_path)
-                print(f"  ✅ Created: {target_path}")
+                print(f"  ✅ Replaced: {target_path}")
+                
+            elif choice == "2":
+                # MERGE（幂等性保证）
+                target_path = os.path.join(args.output, "SOUL.md")
+                if os.path.exists(target_path):
+                    FileManager.structured_merge(final_path, target_path, selected.name, selected.source_work)
+                else:
+                    # 没有现有文件，直接复制
+                    shutil.copy2(final_path, target_path)
+                    print(f"  ✅ Created: {target_path}")
+                
+            else:
+                # KEEP (default)
+                print(f"\n  📄 Kept as: {final_path}")
+                print(f"  💡 To load manually:")
+                print(f"     cp {final_path} ./SOUL.md")
             
         else:
-            # KEEP (default)
-            print(f"\n  📄 Kept as: {final_path}")
-            print(f"  💡 To load manually:")
-            print(f"     cp {final_path} ./SOUL.md")
+            FileManager.rollback(temp_path)
+            raise ValidationError("Generation failed validation", {
+                "score": validation.score,
+                "errors": validation.errors,
+                "suggestion": "Use --force to override"
+            })
         
-    else:
-        FileManager.rollback(temp_path)
-        print("\n❌ Generation failed validation. Use --force to override.")
-        sys.exit(1)
+        print(f"\n{'='*60}")
+        print("✅ Complete!")
+        print(f"{'='*60}")
+        
+    except CharacterLoaderError as e:
+        print(f"\n❌ Error: {e.message}")
+        if e.details:
+            for key, value in e.details.items():
+                if key == "suggestions":
+                    print(f"\n💡 Suggestions:")
+                    for s in value:
+                        print(f"   - {s}")
+                elif key == "options":
+                    print(f"\n📋 Available options:")
+                    for i, opt in enumerate(value, 1):
+                        print(f"   {i}. {opt}")
+                elif isinstance(value, list):
+                    print(f"   {key}: {', '.join(str(v) for v in value)}")
+                else:
+                    print(f"   {key}: {value}")
+        sys.exit(e.exit_code)
     
-    print(f"\n{'='*60}")
-    print("✅ Complete!")
-    print(f"{'='*60}")
+    except Exception as e:
+        print(f"\n💥 Unexpected error: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(ExitCode.DATA_ERROR)
 
 
 if __name__ == "__main__":

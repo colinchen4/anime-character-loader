@@ -2,8 +2,9 @@
 name: anime-character-loader
 description: |
   Load anime character info from multiple sources and generate validated SOUL.generated.md files.
-  Features: multi-source query, forced disambiguation, semantic validation, loading options.
-version: 2.1.0
+  Features: multi-source query, forced disambiguation, cross-source consistency scoring, 
+  idempotent merge, semantic validation.
+version: 2.3.0
 author: OpenClaw
 
 commands:
@@ -20,13 +21,13 @@ options:
   --output, -o: Output directory (default: current)
   --info, -i: Show character info only
   --force, -f: Force generation even with low confidence
-  --select, -s: Select specific match by index
+  --select, -s: Select specific match by index (when multiple found)
 
 output:
   filename: SOUL.generated.md
   loading_options:
     - "[1] REPLACE - cp SOUL.generated.md SOUL.md"
-    - "[2] MERGE - Append to existing SOUL.md"
+    - "[2] MERGE - Idempotent merge into existing SOUL.md (no duplicates)"
     - "[3] KEEP - Manual review"
 
 validation:
@@ -55,84 +56,100 @@ data_sources:
     endpoint: https://api.jikan.moe/v4
     weight: 0.3
     auth: none
-  - name: Fandom Wikia
-    endpoint: https://{wiki}.fandom.com/api.php
-    weight: 0.2
-    auth: none
+
+exit_codes:
+  0: Success
+  10: Network error (API timeout, no internet)
+  20: Data error (no matches, ambiguous name, low confidence)
+  30: Validation error (quality checks failed)
+  40: File error (write failure, permission denied)
 
 features:
-  - Multi-source parallel query
-  - Automatic failover and retry
-  - 24-hour response cache
-  - FORCED disambiguation (requires --anime for ambiguous names)
+  - Multi-source parallel query with cross-source validation
+  - Automatic failover and retry (3 attempts)
+  - 24-hour response cache (SQLite)
+  - Forced disambiguation (requires --anime for ambiguous names)
+  - Cross-source consistency scoring (AniList + Jikan comparison)
+  - Force manual selection when top matches are close (<0.15 gap)
   - Semantic validation with 9 checks
-  - Atomic write with rollback
-  - Loading options prompt
+  - Idempotent merge (character+work deduplication)
+  - Atomic write with rollback (no partial files)
 
 confidence_levels:
-  high: ">= 0.8 (auto-select with hint)"
-  medium: "0.5-0.8 (requires --anime or --select)"
+  high: ">= 0.8"
+  medium: "0.5-0.8"
   low: "< 0.5 (reject or --force)"
 
 forced_disambiguation: |
   When multiple matches found OR single match with low confidence,
   --anime hint is REQUIRED. Prevents selecting wrong character.
+  
+  When top 2 matches have similar scores (gap < 0.15), 
+  --select is REQUIRED. Prevents auto-selecting ambiguous match.
+
+merge_behavior:
+  idempotent: true
+  duplicate_detection: "character_name + source_work"
+  update_on_change: true
+  atomic_write: true
 ---
 
-# Anime Character Loader v2.1
+# Anime Character Loader v2.3
 
 ## Overview
 
 多源动漫角色数据加载器，生成经过验证的 SOUL.generated.md 人格文件。
 
-**⚠️ 重要: v2.1 强制消歧模式** - 同名角色必须提供 `--anime` 提示
+**v2.3 关键改进**:
+1. **幂等合并**: 同一角色多次合并不会重复
+2. **跨源一致性评分**: AniList + Jikan 交叉验证
+3. **强制选择**: 分数接近时强制用户选择
+4. **标准化退出码**: 脚本可识别错误类型
 
-## Key Improvements (v2.1)
+## Key Improvements (v2.3)
 
-### 1. 输出文件约定
-- **固定文件名**: `SOUL.generated.md`
-- **加载选项**: 生成后提示 REPLACE / MERGE / KEEP
+### 1. 退出码系统
+```bash
+0   # 成功
+10  # 网络错误
+20  # 数据错误（无匹配、消歧失败）
+30  # 验证失败
+40  # 文件错误
+```
 
-### 2. 强制消歧 (Force Disambiguation)
+### 2. 跨源一致性评分
+```
+Confidence = (AniList * 0.5 + Jikan * 0.3) + (Consistency * 0.2)
+
+如果 top1 和 top2 差距 < 0.15:
+    → 强制要求 --select 手动选择
+```
+
+### 3. 幂等合并
+```bash
+# 第一次合并
+python load_character.py "Megumi" --anime "Saekano"
+# 选择 MERGE → 添加角色
+
+# 第二次合并（相同角色）
+python load_character.py "Megumi" --anime "Saekano"  
+# 选择 MERGE → 检测到重复，跳过
+
+# 第三次合并（内容更新）
+# 如果生成内容有变化 → 更新而非追加
+```
+
+### 4. 强制消歧增强
 ```bash
 # ❌ 会失败 - Sakura 有多个角色
 python load_character.py "Sakura"
 
-# ✅ 必须提供作品提示
+# ❌ 即使指定作品，如果多个源返回相似结果
 python load_character.py "Sakura" --anime "Fate"
-python load_character.py "Sakura" --anime "Naruto"
+# 可能仍要求 --select 如果 AniList 和 Jikan 结果不一致
 
-# ✅ 或用 --select 手动选择
-python load_character.py "Sakura" --select 2
-```
-
-### 3. 语义校验 (9项检查)
-| 检查项 | 类型 | 说明 |
-|--------|------|------|
-| contains_name | 基础 | 角色名存在 |
-| contains_source | 基础 | 作品名存在 |
-| has_structure | 基础 | 必需章节完整 |
-| content_length | 基础 | 内容长度≥500 |
-| no_placeholders | 基础 | 无占位符文本 |
-| meaningful_background | 语义 | Background 有实质内容 |
-| specific_personality | 语义 | Personality 非通用描述 |
-| speaking_style_details | 语义 | Speaking Style 有细节 |
-| name_consistency | 语义 | 角色名变体一致 |
-
-**通过标准**: 无错误 + 总分 ≥ 80/100
-
-### 4. 加载选项
-生成完成后自动提示：
-```
-How would you like to load this character?
-
-  [1] REPLACE - Replace existing SOUL.md
-      cp ./SOUL.generated.md ./SOUL.md
-
-  [2] MERGE - Add to existing SOUL.md
-      Append character content
-
-  [3] KEEP - Manual review
+# ✅ 必须手动选择
+python load_character.py "Sakura" --anime "Fate" --select 1
 ```
 
 ## Usage Examples
@@ -171,15 +188,23 @@ python load_character.py "加藤惠" --info
         ↓
 2. 多源并行查询 (AniList + Jikan)
         ↓
-3. 强制消歧检查
+3. 跨源一致性评分
+   - 计算名字相似度
+   - 计算作品相似度
+   - 综合置信度排序
+        ↓
+4. 强制消歧检查
    - 多匹配? → 需要 --anime
+   - 分数接近? → 需要 --select
    - 低置信? → 需要 --anime
         ↓
-4. 生成 SOUL.generated.md
+5. 生成 SOUL.generated.md
         ↓
-5. 语义验证 (9项检查)
+6. 语义验证 (9项检查)
         ↓
-6. 提示加载选项 (REPLACE/MERGE/KEEP)
+7. 提示加载选项 (REPLACE/MERGE/KEEP)
+        ↓
+8. 幂等合并（如选择 MERGE）
 ```
 
 ## Configuration
@@ -188,6 +213,11 @@ python load_character.py "加藤惠" --info
 ```python
 # 在 load_character.py 顶部
 FORCE_DISAMBIGUATION = True  # 设为 False 恢复宽松模式
+```
+
+### 强制选择阈值
+```python
+FORCE_SELECTION_THRESHOLD = 0.15  # 分数差距小于此值强制选择
 ```
 
 ### 置信度阈值
@@ -199,12 +229,13 @@ CONFIDENCE_THRESHOLD_LOW = 0.5     # 最低接受线
 
 ## Error Handling
 
-| 场景 | 处理 |
-|------|------|
-| 同名无提示 | ❌ 强制失败，提示用 `--anime` |
-| API 失败 | 重试3次，使用缓存 |
-| 验证失败 | 回滚，可 `--force` 覆盖 |
-| 文件存在 | 自动备份到 `.backup.{timestamp}` |
+| 场景 | 退出码 | 处理 |
+|------|--------|------|
+| API 失败 | 10 | 重试3次后退出 |
+| 同名无提示 | 20 | 强制失败，提示用 `--anime` |
+| 分数接近 | 20 | 强制失败，提示用 `--select` |
+| 验证失败 | 30 | 回滚，可 `--force` 覆盖 |
+| 文件写入失败 | 40 | 清理临时文件后退出 |
 
 ## Cache & Performance
 
