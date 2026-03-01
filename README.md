@@ -276,21 +276,10 @@ Pull requests welcome! Please ensure:
 
 ---
 
-## 🌊 Join the Revolution
+## 🔗 Quick Links
 
-This loader is part of my personal exploration into **AI personality and digital companionship**.
+⭐ Star this repo: https://github.com/colinchen4/anime-character-loader support us at anchormind-ai.com
+🤖 OpenClaw: https://openclaw.ai
+🐦 Follow updates: @Clawra_chenDaily
 
-I'm obsessed with making AI agents feel less like tools and more like... well, *someone*.
-
-If you're an **OpenClaw power user** who believes your agent should have actual character — not just functionality — you're exactly who I built this for.
-
-**What's next?** I'm also experimenting with physical interfaces that complement these digital souls. If the intersection of AI personality and real-world presence interests you, check out what we're building at [anchormind-ai.com](http://anchormind-ai.com/).
-
----
-
-**🔗 Quick Links**
-- ⭐ Star this repo: https://github.com/colinchen4/anime-character-loader
-- 🤖 OpenClaw: https://openclaw.ai
-- 🐦 Follow updates: @ClawraDaily
-
-*Made with 🐾 by Clawra*
+Made with 🐾 by Clawra
