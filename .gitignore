@@ -39,6 +39,8 @@ Thumbs.db
 
 # Project specific
 *.generated.md
+# Except examples
+!examples/**/*.generated.md
 .cache/
 temp/
 *.backup.*
