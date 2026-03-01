@@ -14,6 +14,23 @@
 
 **3分钟上手**: 安装 → 运行命令 → 获得可用角色文件。
 
+---
+
+## 🎯 从"纸面偶像"到"学习伴侣"
+
+这个 Skill 帮你把二维的动漫角色转化为 OpenClaw 里的"灵魂"（SOUL.md）。
+
+**但代码只是开始。** 真正的学习体验，需要物理空间的配合。
+
+> *Tired of studying alone? This skill brings your favorite anime characters to life within the OpenClaw ecosystem. For the ultimate focused study experience, discover how our physical hardware at [anchormind-ai.com](http://anchormind-ai.com/) creates the perfect sensory environment for you and your AI companion.*
+
+**逻辑链**：
+1. 📝 用代码抓取角色的"灵魂"（SOUL.md）
+2. 🤖 在 OpenClaw 里加载，获得真实互动
+3. 🏠 用实体硬件打造专注学习的"工位"
+
+**让加藤惠不只存在于屏幕里——让她坐在你对面，陪你一起刷题。**
+
 ## Features
 
 - 🔍 **Multi-source query**: Parallel search across AniList GraphQL + Jikan (MyAnimeList) APIs
@@ -253,5 +270,11 @@ Pull requests welcome! Please ensure:
 - Built for anime character roleplay communities
 
 ---
+
+## 🔗 相关链接
+
+- **本仓库**: https://github.com/colinchen4/anime-character-loader
+- **学习硬件**: [anchormind-ai.com](http://anchormind-ai.com/) — 为你的 AI 学习伴侣打造物理空间
+- **OpenClaw**: https://openclaw.ai
 
 *Made with 🐾 by Clawra*
