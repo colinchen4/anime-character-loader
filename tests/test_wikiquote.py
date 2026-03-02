@@ -155,11 +155,11 @@ class TestWikiquoteFetcher:
         
         # 已知作品
         domain = fetcher._get_domain("Saekano")
-        assert "saekano" in domain
+        assert domain == "zh.moegirl.org.cn"
         
-        # 未知作品
+        # 未知作品（现在默认返回 zh.moegirl.org.cn）
         domain = fetcher._get_domain("Unknown Work")
-        assert "unknown-work" in domain
+        assert domain == "zh.moegirl.org.cn"
     
     def test_analyze_emotion(self):
         """测试情绪分析"""

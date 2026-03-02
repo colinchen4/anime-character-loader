@@ -167,55 +167,62 @@ class CacheManager:
 
 class WikiquoteFetcher:
     """
-    Fandom Wiki 台词抓取器
+    萌娘百科 台词抓取器
     
-    支持从 Fandom Wiki 网站抓取动漫/游戏角色台词
+    支持从萌娘百科（moegirl.org.cn）网站抓取动漫/游戏角色台词
     """
     
-    # Fandom Wiki 域名映射
-    FANDOM_DOMAINS = {
-        "冴えない彼女の育てかた": "saekano.fandom.com",
-        "路人女主": "saekano.fandom.com",
-        "saekano": "saekano.fandom.com",
-        "fate": "fate.fandom.com",
-        "re:zero": "rezero.fandom.com",
-        "進撃の巨人": "attackontitan.fandom.com",
-        "attack on titan": "attackontitan.fandom.com",
+    # 萌娘百科 域名映射
+    MOEGIRL_DOMAINS = {
+        "冴えない彼女の育てかた": "zh.moegirl.org.cn",
+        "路人女主": "zh.moegirl.org.cn",
+        "saekano": "zh.moegirl.org.cn",
+        "fate": "zh.moegirl.org.cn",
+        "re:zero": "zh.moegirl.org.cn",
+        "進撃の巨人": "zh.moegirl.org.cn",
+        "attack on titan": "zh.moegirl.org.cn",
     }
     
-    DEFAULT_DOMAIN = "fandom.com"
+    DEFAULT_DOMAIN = "zh.moegirl.org.cn"
     REQUEST_TIMEOUT = 30  # 请求超时（秒）
     MAX_RETRIES = 3  # 最大重试次数
     
     def __init__(self, cache_dir: Optional[str] = None):
         self.cache = CacheManager(cache_dir)
         self.session = requests.Session()
+        # 模拟真实浏览器请求头，绕过萌娘百科反爬
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0',
         })
     
     def _get_domain(self, work: str) -> str:
-        """根据作品名获取 Fandom 域名"""
+        """根据作品名获取萌娘百科域名"""
         work_lower = work.lower()
-        for key, domain in self.FANDOM_DOMAINS.items():
+        for key, domain in self.MOEGIRL_DOMAINS.items():
             if key in work_lower or work_lower in key:
                 return domain
-        # 尝试构建域名
-        work_slug = re.sub(r'[^\w\s]', '', work).replace(' ', '-').lower()
-        return f"{work_slug}.{self.DEFAULT_DOMAIN}"
-    
+        return self.DEFAULT_DOMAIN
+
     def _build_search_url(self, character: str, work: str) -> str:
         """构建搜索 URL"""
         domain = self._get_domain(work)
         character_encoded = quote(character.replace(' ', '_'))
-        return f"https://{domain}/wiki/{character_encoded}"
+        return f"https://{domain}/{character_encoded}"
     
     def _build_quotes_url(self, character: str, work: str) -> str:
-        """构建台词页面 URL（尝试 Quotes 子页面）"""
-        domain = self._get_domain(work)
-        character_encoded = quote(character.replace(' ', '_'))
-        # 先尝试 /wiki/Character/Quotes
-        return f"https://{domain}/wiki/{character_encoded}/Quotes"
+        """构建台词页面 URL"""
+        return self._build_search_url(character, work)
     
     def _fetch_page(self, url: str) -> Optional[BeautifulSoup]:
         """获取页面内容"""
