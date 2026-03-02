@@ -417,6 +417,11 @@ class WikiquoteFetcher:
                     # 尝试匹配角色名（支持模糊匹配）
                     for key, data in db.items():
                         if character in key or key in character:
+                            # Schema 校验
+                            if not self._validate_quote_data(data):
+                                logger.error(f"本地数据格式错误: {key}")
+                                continue
+                            
                             quotes = [Quote(**q) for q in data.get('quotes', [])]
                             return QuoteCollection(
                                 character=data['character'],
@@ -430,6 +435,25 @@ class WikiquoteFetcher:
             logger.warning(f"本地数据库加载失败: {e}")
         
         return None
+    
+    def _validate_quote_data(self, data: dict) -> bool:
+        """校验本地数据格式"""
+        required_fields = ['character', 'quotes']
+        for field in required_fields:
+            if field not in data:
+                logger.error(f"缺少必需字段: {field}")
+                return False
+        
+        if not isinstance(data['quotes'], list):
+            logger.error("quotes 必须是列表")
+            return False
+        
+        for i, q in enumerate(data['quotes']):
+            if 'text' not in q:
+                logger.error(f"第{i+1}条台词缺少 text 字段")
+                return False
+        
+        return True
     
     def fetch(self, character: str, work: str, use_cache: bool = True, use_local_db: bool = True) -> QuoteCollection:
         """

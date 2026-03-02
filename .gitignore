@@ -49,3 +49,7 @@ temp/
 test_*.md
 *_test.md
 backup-*
+
+# Runtime cache
+src/anime_character_loader/cache/
+!src/anime_character_loader/cache/.gitkeep
