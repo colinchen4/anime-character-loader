@@ -16,5 +16,5 @@ setup(
             "anime-character-loader=anime_character_loader.cli:main",
         ],
     },
-    python_requires=">=3.10",
+    python_requires=">=3.9",
 )
