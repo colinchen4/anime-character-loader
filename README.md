@@ -250,13 +250,29 @@ MAX_RETRIES = 3                       # API retry attempts
 ### Wikiquote / Fandom Hybrid Integration
 Three-phase quote fetching with confidence scoring:
 - **Phase 1 (API)**: MediaWiki API (`action=parse`) for structured data
-- **Phase 2 (Browser)**: Playwright fallback for JavaScript-rendered content
+- **Phase 2 (Browser)**: Camoufox fallback for Cloudflare bypass
 - **Phase 3 (Local)**: `data/quotes_database.json` as seed corpus
 
 **Features**:
 - Speaker extraction: `Character: quote`, `(Character) quote`, `[Character] quote`
 - Confidence scoring (0-1): section match + speaker match + text quality
 - Deduplication: MD5-based `quote_id`
+
+### Smart Excerpt Generator (辅助/兜底)
+当 Wiki 没有专门的 Quotes 区块时，提取角色描述作为补充素材：
+- **Source**: Fandom (英文) + 萌娘百科 (中文)
+- **Content**: Biography, Personality, Background 等章节摘录
+- **⚠️ Important**: 这是"角色描述摘录"，**不是原始台词**
+- **Usage**: 作为 `wikiquote` 的兜底/补充，提供角色背景上下文
+
+**Example**:
+```python
+from anime_character_loader.extractors.smart_excerpt_generator import generate_smart_excerpts
+
+result = generate_smart_excerpts('泽村·斯潘塞·英梨梨', '路人女主')
+# result['excerpts'][0]['text'] = "因为小学时被霸凌过，在外都会戴上大小姐的假面具..."
+# result['excerpts'][0]['note'] = "⚠️ 来自Wiki角色描述，不是原始台词"
+```
 - Source tracing: `source_type` (api/browser/local/cache) + `source_url`
 
 **Note**: "MediaWiki API抓取 + Playwright精准提取 + 本地语料兜底, 不保证所有页面结构一致".
