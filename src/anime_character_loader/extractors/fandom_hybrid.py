@@ -436,25 +436,26 @@ class FandomHybridFetcher:
     
     def _fetch_browser(self, url: str, character: str) -> List[QuoteItem]:
         """
-        Phase 2: Playwright 浏览器提取
+        Phase 2: Camofox 浏览器提取（替代 Playwright）
         
-        注意：需要外部提供 Playwright 环境
+        使用 Camofox 绕过 Cloudflare 等反爬机制
         """
-        # 尝试导入 Playwright
+        # 尝试导入 Camoufox
         try:
-            from playwright.sync_api import sync_playwright
+            from camoufox import Camoufox
         except ImportError:
-            logger.warning("Playwright 未安装，跳过 browser 模式")
+            logger.warning("Camoufox 未安装，跳过 browser 模式")
             return []
         
         quotes = []
         try:
-            with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
+            logger.info(f"Camoufox 访问: {url}")
+            
+            with Camoufox(headless=True) as browser:
                 page = browser.new_page()
                 
-                logger.info(f"Browser 访问: {url}")
-                page.goto(url, wait_until="networkidle", timeout=30000)
+                # 访问页面
+                page.goto(url, timeout=30000)
                 
                 # 等待内容加载
                 page.wait_for_selector(".mw-parser-output", timeout=10000)
@@ -466,10 +467,8 @@ class FandomHybridFetcher:
                 # 提取台词
                 quotes = self._parse_global_fallback(soup, character, url)
                 
-                browser.close()
-                
         except Exception as e:
-            logger.error(f"Browser 提取失败: {e}")
+            logger.error(f"Camoufox 提取失败: {e}")
             return []
         
         # 过滤
