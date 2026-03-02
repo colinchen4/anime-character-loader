@@ -23,6 +23,7 @@
 - ✅ **Semantic validation**: 9-check validation system (structure + content quality)
 - 🔄 **Idempotent merge**: Chapter-level merge with deduplication (same character won't be added twice)
 - 💾 **Smart caching**: 24-hour SQLite cache with automatic retry logic
+- 🎭 **Wikiquote Fetcher**: 3-phase台词抓取 (API → Browser → Local)，带置信度评分与Speaker识别
 - Actual output example:
 <img src="https://github.com/user-attachments/assets/41d52fb6-e82e-4e95-86a5-3a167042d53c" width="600" alt="对话演示">
 
@@ -246,33 +247,33 @@ MAX_RETRIES = 3                       # API retry attempts
 | Jikan | 30% | https://api.jikan.moe/v4 | None |
 | Wikiquote | Fallback | MediaWiki API (zh.moegirl.org.cn) | None |
 
-### Wikiquote Integration
-The system uses the MediaWiki API to fetch character quotes as a fallback/supplement to ensure high-quality speaking style data.
-- **Data Source**: MediaWiki API (`action=parse`) + local `quotes_database.json` fallback.
-- **Parsing**: Extracts structured quotes from specific sections (Quotes/台词/名言).
-- **Source Tracing**: Every quote includes `source_url`, `section`, and `quote_id`.
-- **Note**: "MediaWiki API抓取 + 本地语料兜底, 不保证所有页面结构一致".
+### Wikiquote / Fandom Hybrid Integration
+Three-phase quote fetching with confidence scoring:
+- **Phase 1 (API)**: MediaWiki API (`action=parse`) for structured data
+- **Phase 2 (Browser)**: Playwright fallback for JavaScript-rendered content
+- **Phase 3 (Local)**: `data/quotes_database.json` as seed corpus
 
-**Example Command**:
-```bash
-python3 -m anime_character_loader.extractors.wikiquote
-```
-**Expected Output Fields**:
-```json
-{
-  "character": "加藤惠",
-  "quotes": [
-    {
-      "text": "うん、それならいいよ",
-      "context": "台词",
-      "emotion": "平静",
-      "source_url": "https://zh.moegirl.org.cn/%E5%8A%A0%E8%97%A4%E6%83%A0",
-      "section": "台词",
-      "quote_id": "a1b2c3d4"
-    }
-  ],
-  "source_type": "api"
-}
+**Features**:
+- Speaker extraction: `Character: quote`, `(Character) quote`, `[Character] quote`
+- Confidence scoring (0-1): section match + speaker match + text quality
+- Deduplication: MD5-based `quote_id`
+- Source tracing: `source_type` (api/browser/local/cache) + `source_url`
+
+**Note**: "MediaWiki API抓取 + Playwright精准提取 + 本地语料兜底, 不保证所有页面结构一致".
+
+**Example**:
+```python
+from anime_character_loader.extractors.fandom_hybrid import fetch_quotes_fandom
+
+result = fetch_quotes_fandom('Eriri Spencer Sawamura', 'Saekano')
+# result['source_type'] = 'local'  # when API/Browser fail
+# result['quotes'][0] = {
+#   'text': 'Baka! Chigau!',
+#   'speaker': 'unknown',
+#   'confidence': 0.8,
+#   'quote_id': 'abc123',
+#   'section': ''
+# }
 ```
 
 ## Verified Scenarios
