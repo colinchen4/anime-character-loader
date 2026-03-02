@@ -443,20 +443,20 @@ class FandomHybridFetcher:
         - 结构: <dl><dt>Speaker</dt><dd>Quote</dd></dl>
         - 或者: <blockquote>Quote</blockquote>
         """
-        # 尝试导入 Camoufox
+        # 尝试导入 Camofox
         try:
-            from camoufox import Camoufox
+            from camofox import Camofox
         except ImportError:
-            logger.warning("Camoufox 未安装，跳过 browser 模式")
+            logger.warning("Camofox 未安装，跳过 browser 模式")
             return []
         
         quotes = []
         try:
             # 优先尝试 Quotes 子页面
             quotes_url = url.replace('/wiki/', '/wiki/') + '/Quotes'
-            logger.info(f"Camoufox 访问 Quotes 页面: {quotes_url}")
+            logger.info(f"Camofox 访问 Quotes 页面: {quotes_url}")
             
-            with Camoufox(headless=True) as browser:
+            with Camofox(headless=True) as browser:
                 page = browser.new_page()
                 
                 # 访问 Quotes 子页面
@@ -488,7 +488,7 @@ class FandomHybridFetcher:
                     quotes = self._parse_fandom_character_page(soup, character, url)
                 
         except Exception as e:
-            logger.error(f"Camoufox 提取失败: {e}")
+            logger.error(f"Camofox 提取失败: {e}")
             return []
         
         # 过滤低置信度

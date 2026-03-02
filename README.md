@@ -250,7 +250,7 @@ MAX_RETRIES = 3                       # API retry attempts
 ### Wikiquote / Fandom Hybrid Integration
 Three-phase quote fetching with confidence scoring:
 - **Phase 1 (API)**: MediaWiki API (`action=parse`) for structured data
-- **Phase 2 (Browser)**: Camoufox fallback for Cloudflare bypass
+- **Phase 2 (Browser)**: Camofox fallback for Cloudflare bypass
 - **Phase 3 (Local)**: `data/quotes_database.json` as seed corpus
 
 **Features**:
