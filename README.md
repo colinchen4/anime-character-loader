@@ -48,7 +48,10 @@ anime-character-loader/
 │  ├─ errors.py / models.py
 │  ├─ sources/ disambiguation/ generator/ validator/ storage/
 ├─ tests/                               # minimal regression tests
-└─ SKILL.md                             # skill metadata and usage
+├─ SKILL.md                             # skill metadata and usage
+└─ examples/                            # example outputs and usage guides
+   ├─ characters/                       # sample SOUL.md files
+   └─ saekano/                          # merge demonstration
 ```
 
 ## Quick Start
