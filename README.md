@@ -238,12 +238,42 @@ CACHE_DURATION = timedelta(hours=24)  # Cache expiration
 MAX_RETRIES = 3                       # API retry attempts
 ```
 
-## API Sources
+## API Sources & Wikiquote
 
 | Source | Weight | Endpoint | Auth |
 |--------|--------|----------|------|
 | AniList | 50% | https://graphql.anilist.co | None |
 | Jikan | 30% | https://api.jikan.moe/v4 | None |
+| Wikiquote | Fallback | MediaWiki API (zh.moegirl.org.cn) | None |
+
+### Wikiquote Integration
+The system uses the MediaWiki API to fetch character quotes as a fallback/supplement to ensure high-quality speaking style data.
+- **Data Source**: MediaWiki API (`action=parse`) + local `quotes_database.json` fallback.
+- **Parsing**: Extracts structured quotes from specific sections (Quotes/台词/名言).
+- **Source Tracing**: Every quote includes `source_url`, `section`, and `quote_id`.
+- **Note**: "MediaWiki API抓取 + 本地语料兜底, 不保证所有页面结构一致".
+
+**Example Command**:
+```bash
+python3 -m anime_character_loader.extractors.wikiquote
+```
+**Expected Output Fields**:
+```json
+{
+  "character": "加藤惠",
+  "quotes": [
+    {
+      "text": "うん、それならいいよ",
+      "context": "台词",
+      "emotion": "平静",
+      "source_url": "https://zh.moegirl.org.cn/%E5%8A%A0%E8%97%A4%E6%83%A0",
+      "section": "台词",
+      "quote_id": "a1b2c3d4"
+    }
+  ],
+  "source_type": "api"
+}
+```
 
 ## Verified Scenarios
 
