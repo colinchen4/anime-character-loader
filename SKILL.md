@@ -96,6 +96,16 @@ merge_behavior:
 
 # Anime Character Loader v2.3
 
+## Structured Architecture (Skill + CLI)
+
+This repository is organized as a skill + CLI hybrid:
+
+- `load_character.py`: legacy-compatible CLI command (wrapper)
+- `src/anime_character_loader/cli.py`: structured CLI entrypoint
+- `src/anime_character_loader/legacy.py`: preserved legacy behavior implementation
+- `src/anime_character_loader/{sources,disambiguation,generator,validator,storage}`: module boundaries for maintainability
+- `tests/`: minimal regression coverage for compatibility-critical paths
+
 ## Overview
 
 多源动漫角色数据加载器，生成经过验证的 SOUL.generated.md 人格文件。

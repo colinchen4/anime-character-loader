@@ -35,7 +35,31 @@ cd anime-character-loader
 pip install requests
 ```
 
+## Project Structure (Skill + CLI)
+
+This repository is now organized as a **skill + CLI hybrid project**:
+
+```text
+anime-character-loader/
+├─ load_character.py                    # legacy-compatible CLI wrapper
+├─ src/anime_character_loader/          # structured package entrypoint + modules
+│  ├─ cli.py
+│  ├─ legacy.py                         # preserved behavior implementation snapshot
+│  ├─ errors.py / models.py
+│  ├─ sources/ disambiguation/ generator/ validator/ storage/
+├─ tests/                               # minimal regression tests
+└─ SKILL.md                             # skill metadata and usage
+```
+
 ## Quick Start
+
+### Quick Start (Legacy Command Compatible)
+
+Old command remains supported:
+
+```bash
+python3 load_character.py "Kasumigaoka Utaha"
+```
 
 ### Basic Usage
 
