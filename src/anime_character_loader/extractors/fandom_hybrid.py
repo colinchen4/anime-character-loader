@@ -436,9 +436,12 @@ class FandomHybridFetcher:
     
     def _fetch_browser(self, url: str, character: str) -> List[QuoteItem]:
         """
-        Phase 2: Camofox 浏览器提取（替代 Playwright）
+        Phase 2: Camofox 浏览器提取（Fandom 专用模板）
         
-        使用 Camofox 绕过 Cloudflare 等反爬机制
+        针对 Fandom Quotes 子页面优化：
+        - URL: /wiki/Character/Quotes
+        - 结构: <dl><dt>Speaker</dt><dd>Quote</dd></dl>
+        - 或者: <blockquote>Quote</blockquote>
         """
         # 尝试导入 Camoufox
         try:
@@ -449,31 +452,177 @@ class FandomHybridFetcher:
         
         quotes = []
         try:
-            logger.info(f"Camoufox 访问: {url}")
+            # 优先尝试 Quotes 子页面
+            quotes_url = url.replace('/wiki/', '/wiki/') + '/Quotes'
+            logger.info(f"Camoufox 访问 Quotes 页面: {quotes_url}")
             
             with Camoufox(headless=True) as browser:
                 page = browser.new_page()
                 
-                # 访问页面
-                page.goto(url, timeout=30000)
+                # 访问 Quotes 子页面
+                page.goto(quotes_url, timeout=60000)
                 
-                # 等待内容加载
-                page.wait_for_selector(".mw-parser-output", timeout=10000)
+                # 等待内容加载（Fandom 使用 .mw-parser-output）
+                try:
+                    page.wait_for_selector(".mw-parser-output", timeout=15000)
+                except:
+                    logger.warning("等待 .mw-parser-output 超时，尝试继续")
                 
                 # 提取 HTML
                 content = page.content()
                 soup = BeautifulSoup(content, 'html.parser')
                 
-                # 提取台词
-                quotes = self._parse_global_fallback(soup, character, url)
+                # 使用 Fandom 专用解析
+                quotes = self._parse_fandom_quotes_page(soup, character, quotes_url)
+                
+                # 如果 Quotes 子页面没有内容，尝试主页面
+                if not quotes:
+                    logger.info(f"Quotes 子页面为空，尝试主页面: {url}")
+                    page.goto(url, timeout=60000)
+                    try:
+                        page.wait_for_selector(".mw-parser-output", timeout=15000)
+                    except:
+                        pass
+                    content = page.content()
+                    soup = BeautifulSoup(content, 'html.parser')
+                    quotes = self._parse_fandom_character_page(soup, character, url)
                 
         except Exception as e:
             logger.error(f"Camoufox 提取失败: {e}")
             return []
         
-        # 过滤
+        # 过滤低置信度
         quotes = [q for q in quotes if q.confidence >= self.LOW_CONFIDENCE_THRESHOLD]
         return self._deduplicate_quotes(quotes)
+    
+    def _parse_fandom_quotes_page(self, soup: BeautifulSoup, character: str, source_url: str) -> List[QuoteItem]:
+        """
+        解析 Fandom Quotes 子页面
+        
+        Fandom 典型结构:
+        <h2>Section Name</h2>
+        <dl>
+            <dt>Speaker Name</dt>
+            <dd>"Quote text"</dd>
+            <dt>Another Speaker</dt>
+            <dd>"Another quote"</dd>
+        </dl>
+        """
+        quotes = []
+        content = soup.find('div', {'class': 'mw-parser-output'})
+        if not content:
+            return quotes
+        
+        current_section = ""
+        
+        for elem in content.find_all(['h2', 'h3', 'dl', 'blockquote']):
+            # 更新当前 section
+            if elem.name in ['h2', 'h3']:
+                current_section = elem.get_text(strip=True).replace('[edit]', '').strip()
+                continue
+            
+            # 解析 <dl> 列表（Fandom 常用）
+            if elem.name == 'dl':
+                dts = elem.find_all('dt')
+                dds = elem.find_all('dd')
+                
+                for dt, dd in zip(dts, dds):
+                    speaker = dt.get_text(strip=True)
+                    text = dd.get_text(strip=True)
+                    
+                    if self._is_valid_quote_text(text):
+                        clean_text = self._clean_quote_text(text)
+                        quote_id = hashlib.md5(clean_text.encode()).hexdigest()[:8]
+                        
+                        # Fandom Quotes 页面置信度较高
+                        confidence = 0.9 if speaker else 0.7
+                        
+                        quotes.append(QuoteItem(
+                            text=clean_text,
+                            speaker=speaker or "unknown",
+                            section=current_section,
+                            quote_id=quote_id,
+                            confidence=confidence,
+                            source_url=source_url
+                        ))
+            
+            # 解析 <blockquote>（备用）
+            elif elem.name == 'blockquote':
+                text = elem.get_text(strip=True)
+                if self._is_valid_quote_text(text):
+                    clean_text = self._clean_quote_text(text)
+                    quote_id = hashlib.md5(clean_text.encode()).hexdigest()[:8]
+                    
+                    quotes.append(QuoteItem(
+                        text=clean_text,
+                        speaker="unknown",
+                        section=current_section,
+                        quote_id=quote_id,
+                        confidence=0.75,
+                        source_url=source_url
+                    ))
+        
+        return quotes
+    
+    def _parse_fandom_character_page(self, soup: BeautifulSoup, character: str, source_url: str) -> List[QuoteItem]:
+        """
+        解析 Fandom 角色主页面（查找 Quotes section）
+        """
+        quotes = []
+        content = soup.find('div', {'class': 'mw-parser-output'})
+        if not content:
+            return quotes
+        
+        # 查找 Quotes section
+        in_quotes_section = False
+        current_section = ""
+        
+        for elem in content.children:
+            if hasattr(elem, 'name'):
+                # 检查是否是 Quotes section 的标题
+                if elem.name in ['h2', 'h3']:
+                    section_text = elem.get_text(strip=True).lower()
+                    if any(k in section_text for k in ['quote', 'quotes', '台词', '名言']):
+                        in_quotes_section = True
+                        current_section = elem.get_text(strip=True).replace('[edit]', '').strip()
+                    else:
+                        in_quotes_section = False
+                    continue
+                
+                # 如果在 Quotes section 内，提取台词
+                if in_quotes_section:
+                    if elem.name == 'dl':
+                        dts = elem.find_all('dt')
+                        dds = elem.find_all('dd')
+                        for dt, dd in zip(dts, dds):
+                            speaker = dt.get_text(strip=True)
+                            text = dd.get_text(strip=True)
+                            if self._is_valid_quote_text(text):
+                                clean_text = self._clean_quote_text(text)
+                                quote_id = hashlib.md5(clean_text.encode()).hexdigest()[:8]
+                                quotes.append(QuoteItem(
+                                    text=clean_text,
+                                    speaker=speaker or "unknown",
+                                    section=current_section,
+                                    quote_id=quote_id,
+                                    confidence=0.85,
+                                    source_url=source_url
+                                ))
+                    elif elem.name == 'blockquote':
+                        text = elem.get_text(strip=True)
+                        if self._is_valid_quote_text(text):
+                            clean_text = self._clean_quote_text(text)
+                            quote_id = hashlib.md5(clean_text.encode()).hexdigest()[:8]
+                            quotes.append(QuoteItem(
+                                text=clean_text,
+                                speaker="unknown",
+                                section=current_section,
+                                quote_id=quote_id,
+                                confidence=0.7,
+                                source_url=source_url
+                            ))
+        
+        return quotes
     
     def _fetch_local(self, character: str) -> List[QuoteItem]:
         """Phase 3: 本地数据库兜底"""
