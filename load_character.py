@@ -19,6 +19,13 @@ def _bootstrap_src_path() -> None:
 
 def main() -> int:
     _bootstrap_src_path()
+
+    # Keep legacy help text stable for backward compatibility baseline.
+    if __name__ == "__main__":
+        import sys as _sys
+
+        _sys.argv[0] = "load_character.py"
+
     from anime_character_loader.cli import main as cli_main
 
     return cli_main()
