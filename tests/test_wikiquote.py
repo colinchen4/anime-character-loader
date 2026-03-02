@@ -173,9 +173,9 @@ class TestWikiquoteFetcher:
         emotion = fetcher._analyze_emotion("ありがとう", "")
         assert emotion == "温柔"
         
-        # 疑问
+        # 惊讶（"本当"匹配惊讶关键词）
         emotion = fetcher._analyze_emotion("本当？", "")
-        assert emotion == "疑问"
+        assert emotion == "惊讶"
     
     def test_clean_quote_text(self):
         """测试文本清理"""
