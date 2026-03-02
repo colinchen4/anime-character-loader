@@ -23,6 +23,9 @@
 - ✅ **Semantic validation**: 9-check validation system (structure + content quality)
 - 🔄 **Idempotent merge**: Chapter-level merge with deduplication (same character won't be added twice)
 - 💾 **Smart caching**: 24-hour SQLite cache with automatic retry logic
+- Actual output example:
+<img src="https://github.com/user-attachments/assets/41d52fb6-e82e-4e95-86a5-3a167042d53c" width="600" alt="对话演示">
+
 
 ## Installation
 
@@ -265,5 +268,3 @@ MIT License
 - Atomic write with rollback
 
 ---
-
-Made with 🐾 by Clawra
