@@ -399,7 +399,39 @@ class WikiquoteFetcher:
         
         return "平静"
     
-    def fetch(self, character: str, work: str, use_cache: bool = True) -> QuoteCollection:
+    def _load_from_local_db(self, character: str) -> Optional[QuoteCollection]:
+        """从本地 JSON 数据库加载台词"""
+        try:
+            # 查找本地数据库文件
+            db_paths = [
+                Path(__file__).parent.parent.parent.parent / "data" / "quotes_database.json",
+                Path(__file__).parent / ".." / ".." / ".." / "data" / "quotes_database.json",
+                Path.cwd() / "data" / "quotes_database.json",
+            ]
+            
+            for db_path in db_paths:
+                if db_path.exists():
+                    with open(db_path, 'r', encoding='utf-8') as f:
+                        db = json.load(f)
+                    
+                    # 尝试匹配角色名（支持模糊匹配）
+                    for key, data in db.items():
+                        if character in key or key in character:
+                            quotes = [Quote(**q) for q in data.get('quotes', [])]
+                            return QuoteCollection(
+                                character=data['character'],
+                                work=data.get('work', ''),
+                                quotes=quotes,
+                                source_url=f"local://{db_path}#{key}",
+                                fetched_at=data.get('fetched_at', time.time())
+                            )
+                    break
+        except Exception as e:
+            logger.warning(f"本地数据库加载失败: {e}")
+        
+        return None
+    
+    def fetch(self, character: str, work: str, use_cache: bool = True, use_local_db: bool = True) -> QuoteCollection:
         """
         抓取角色台词
         
@@ -407,6 +439,7 @@ class WikiquoteFetcher:
             character: 角色名
             work: 作品名
             use_cache: 是否使用缓存
+            use_local_db: 是否优先使用本地数据库
         
         Returns:
             QuoteCollection: 台词集合
@@ -421,6 +454,15 @@ class WikiquoteFetcher:
             if cached:
                 logger.info(f"使用缓存数据: {character}@{work}")
                 return cached
+        
+        # 优先尝试本地数据库
+        if use_local_db:
+            local_data = self._load_from_local_db(character)
+            if local_data:
+                logger.info(f"使用本地数据库: {character}")
+                if use_cache:
+                    self.cache.set(local_data)
+                return local_data
         
         # 构建 URL 并获取页面
         quotes_url = self._build_quotes_url(character, work)
@@ -474,25 +516,27 @@ class WikiquoteFetcher:
             raise
 
 
-def fetch_quotes(character: str, work: str, use_cache: bool = True, cache_dir: Optional[str] = None) -> Dict[str, Any]:
+def fetch_quotes(character: str, work: str = "", use_cache: bool = True, 
+                 cache_dir: Optional[str] = None, use_local_db: bool = True) -> Dict[str, Any]:
     """
-    便捷函数：抓取角色台词
+    便捷函数：抓取角色台词（优先本地数据库）
     
     Args:
         character: 角色名
-        work: 作品名
+        work: 作品名（可选，本地数据库优先时可省略）
         use_cache: 是否使用缓存
         cache_dir: 缓存目录
+        use_local_db: 是否优先使用本地数据库
     
     Returns:
         dict: 结构化台词数据
     
     Example:
-        >>> result = fetch_quotes("英梨々", "冴えない彼女の育てかた")
+        >>> result = fetch_quotes("泽村·斯潘塞·英梨梨")
         >>> print(result['quotes'][0]['text'])
     """
     fetcher = WikiquoteFetcher(cache_dir=cache_dir)
-    collection = fetcher.fetch(character, work, use_cache)
+    collection = fetcher.fetch(character, work, use_cache, use_local_db)
     return collection.to_dict()
 
 

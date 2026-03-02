@@ -1,0 +1,58 @@
+{
+  "character": "泽村·斯潘塞·英梨梨",
+  "work": "路人女主的养成方法",
+  "quotes": [
+    {
+      "text": "バカ！違う！別に伦也のために描いてるわけじゃないんだから！",
+      "context": "傲娇否认",
+      "emotion": "傲娇"
+    },
+    {
+      "text": "私、絶対に負けない！誰にも、何にも！",
+      "context": "决心宣言",
+      "emotion": "坚定"
+    },
+    {
+      "text": "あのね、伦也……私、ちゃんと届けたいものがあるの",
+      "context": "告白前",
+      "emotion": "温柔"
+    },
+    {
+      "text": "え？な、何言ってるのよバカ！そんなわけないでしょ！",
+      "context": "被戳穿心事",
+      "emotion": "慌张"
+    },
+    {
+      "text": "五年間、一緒にいたのに……なんであいつばっかりなのよ",
+      "context": "嫉妒",
+      "emotion": "悲伤"
+    },
+    {
+      "text": "柏木エリとしての私と、澤村英梨々としての私……どっちも、私なんだから",
+      "context": "自我认同",
+      "emotion": "认真"
+    },
+    {
+      "text": "もう、知らない！勝手にしなさいよ！",
+      "context": "生气",
+      "emotion": "生气"
+    },
+    {
+      "text": "……ありがとう。ちょっとだけ、認めてあげる",
+      "context": "感谢",
+      "emotion": "傲娇"
+    },
+    {
+      "text": "私だって、変われるんだから！見てなさい！",
+      "context": "决意",
+      "emotion": "自信"
+    },
+    {
+      "text": "倫也のバカ！鈍感！最低！",
+      "context": "日常吐槽",
+      "emotion": "吐槽"
+    }
+  ],
+  "source_url": "local:///Users/chensihao/skills/anime-character-loader/data/quotes_database.json#泽村·斯潘塞·英梨梨",
+  "fetched_at": 1709376000
+}
