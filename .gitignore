@@ -48,3 +48,4 @@ temp/
 # Test outputs
 test_*.md
 *_test.md
+backup-*
