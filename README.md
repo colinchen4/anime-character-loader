@@ -2,6 +2,8 @@
 
 > **输入角色名，生成可用 SOUL.generated.md，避免同名误判。**
 
+Built by [Anchormind AI](https://anchormind-ai.com) — screen-free AI learning companions that actually see your books.
+
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -30,6 +32,23 @@
 
 ## Installation
 
+### As OpenClaw Skill (Recommended)
+
+```bash
+# Install via ClawHub
+clawhub install anime-character-loader
+
+# Or install from local clone
+clawhub install ./anime-character-loader
+```
+
+Then use in OpenClaw:
+```
+@your_bot load_character "Kasumigaoka Utaha"
+```
+
+### As Standalone CLI
+
 ```bash
 # Clone the repository
 git clone https://github.com/colinchen4/anime-character-loader.git
@@ -37,6 +56,9 @@ cd anime-character-loader
 
 # Install dependencies
 pip install requests
+
+# Run directly
+python3 load_character.py "Kasumigaoka Utaha"
 ```
 
 ## Project Structure (Skill + CLI)
@@ -317,6 +339,13 @@ result = fetch_quotes_fandom('Eriri Spencer Sawamura', 'Saekano')
 - Python 3.10+
 - requests library
 - Internet connection
+
+## About
+
+This tool is part of the [Anchormind](https://anchormind-ai.com) ecosystem.  
+We build **AI-native learning hardware** — from character-driven study companions to interactive knowledge tools.
+
+For product updates and enterprise solutions: [anchormind-ai.com](https://anchormind-ai.com)
 
 ## License
 
