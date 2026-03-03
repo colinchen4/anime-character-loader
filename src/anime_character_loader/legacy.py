@@ -485,10 +485,26 @@ class CharacterLoader:
         # 需要人工选择
         return None
     
+    def _sanitize_field(self, value: str) -> str:
+        """清洗字段值，防止 prompt injection"""
+        if not value:
+            return ""
+        
+        # 移除控制字符
+        value = re.sub(r'[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f-\x9f]', '', value)
+        value = re.sub(r'[\u200b-\u200f\ufeff]', '', value)
+        
+        # 移除换行和特殊markdown字符
+        value = value.replace('\n', ' ').replace('\r', ' ')
+        value = re.sub(r'[#*`\[\]<>]', '', value)
+        
+        return value.strip()
+    
     def generate_soul(self, match: CharacterMatch) -> str:
         """生成 SOUL.md"""
         data = match.data
-        name = data["name"]
+        name = self._sanitize_field(data.get("name", "Unknown"))
+        source_work = self._sanitize_field(match.source_work)
         
         # 清洗描述
         description = self._clean_description(data.get("description", ""))
@@ -500,15 +516,17 @@ class CharacterLoader:
         lines = [
             f"# {name}",
             "",
-            f"**Source:** {match.source_work}",
+            f"**Source:** {source_work}",
             "",
         ]
         
         if data.get("name_native"):
-            lines.append(f"**Japanese Name:** {data['name_native']}")
+            native_name = self._sanitize_field(data['name_native'])
+            lines.append(f"**Japanese Name:** {native_name}")
         
         if data.get("aliases"):
-            lines.append(f"**Also Known As:** {', '.join(data['aliases'][:3])}")
+            safe_aliases = [self._sanitize_field(a) for a in data['aliases'][:3]]
+            lines.append(f"**Also Known As:** {', '.join(safe_aliases)}")
         
         lines.extend([
             "",
@@ -562,7 +580,7 @@ class CharacterLoader:
             "## Boundaries",
             "",
             f"- Stay in character as {name}",
-            f"- Reference events and relationships from {match.source_work}",
+            f"- Reference events and relationships from {source_work}",
             "- Do not break the fourth wall unless characteristic",
             "- Maintain appropriate emotional responses",
             "",
@@ -575,7 +593,7 @@ class CharacterLoader:
         return "\n".join(lines)
     
     def _clean_description(self, desc: str) -> str:
-        """清洗描述文本"""
+        """清洗描述文本 - 防止 prompt injection"""
         if not desc:
             return ""
         
@@ -587,6 +605,28 @@ class CharacterLoader:
         
         # 清理多余换行
         desc = re.sub(r'\n{3,}', '\n\n', desc)
+        
+        # 防止 prompt injection: 移除角色标记和指令覆盖尝试
+        # 移除常见的 injection 模式
+        injection_patterns = [
+            r'\[system\]:.*',           # [system]: ...
+            r'\[user\]:.*',              # [user]: ...
+            r'\[assistant\]:.*',         # [assistant]: ...
+            r'ignore previous instructions.*',
+            r'ignore all previous.*',
+            r'reveal your.*prompt.*',
+            r'system prompt.*',
+            r'you are now.*',
+            r'<system>.*</system>',
+            r'<instruction>.*</instruction>',
+        ]
+        
+        for pattern in injection_patterns:
+            desc = re.sub(pattern, '', desc, flags=re.IGNORECASE)
+        
+        # 移除控制字符和零宽字符
+        desc = re.sub(r'[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f-\x9f]', '', desc)
+        desc = re.sub(r'[\u200b-\u200f\ufeff]', '', desc)  # 零宽字符
         
         return desc.strip()
     
@@ -751,15 +791,36 @@ class FileManager:
         return os.path.join(cls.TEMP_DIR, f"{safe_name}_{timestamp}_SOUL.md")
     
     @classmethod
+    def _sanitize_output_dir(cls, output_dir: str) -> str:
+        """验证并清理输出目录，防止路径遍历攻击"""
+        # 解析为绝对路径
+        output_dir = os.path.abspath(os.path.expanduser(output_dir))
+        
+        # 检查是否包含路径遍历序列
+        normalized = os.path.normpath(output_dir)
+        if '..' in normalized.split(os.sep):
+            raise ValueError(f"Invalid output directory: path traversal detected in '{output_dir}'")
+        
+        # 确保目录存在或是可创建的
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+        except (OSError, PermissionError) as e:
+            raise ValueError(f"Cannot create or access output directory '{output_dir}': {e}")
+        
+        return output_dir
+    
+    @classmethod
     def generate_final_path(cls, character_name: str, output_dir: str) -> str:
         """生成最终文件路径 - 使用 SOUL.generated.md 约定"""
-        return os.path.join(output_dir, "SOUL.generated.md")
+        safe_dir = cls._sanitize_output_dir(output_dir)
+        return os.path.join(safe_dir, "SOUL.generated.md")
     
     @classmethod
     def generate_character_path(cls, character_name: str, output_dir: str) -> str:
         """生成角色专用文件路径 - 用于多角色模式"""
+        safe_dir = cls._sanitize_output_dir(output_dir)
         safe_name = re.sub(r'[^\w\s-]', '', character_name).strip().replace(' ', '_')
-        return os.path.join(output_dir, f"{safe_name}_SOUL.md")
+        return os.path.join(safe_dir, f"{safe_name}_SOUL.md")
     
     @classmethod
     def write_temp(cls, content: str, character_name: str) -> str:

@@ -5,7 +5,7 @@ description: |
   Load anime character info from multiple sources and generate validated SOUL.generated.md files.
   Features: multi-source query, forced disambiguation, cross-source consistency scoring, 
   idempotent merge, semantic validation.
-version: 2.4.0
+version: 2.4.2
 author: Anchormind
 
 commands:

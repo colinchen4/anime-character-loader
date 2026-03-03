@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="anime-character-loader",
-    version="2.4.0",
+    version="2.4.2",
     description="Generate validated anime character SOUL.md for OpenClaw agents",
     author="colinchen4",
     url="https://github.com/colinchen4/anime-character-loader",
