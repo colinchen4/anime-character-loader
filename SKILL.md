@@ -1,5 +1,6 @@
 ---
 name: anime-character-loader
+type: python-package
 description: |
   Load anime character info from multiple sources and generate validated SOUL.generated.md files.
   Features: multi-source query, forced disambiguation, cross-source consistency scoring, 
@@ -253,3 +254,79 @@ CONFIDENCE_THRESHOLD_LOW = 0.5     # 最低接受线
 - 24小时过期
 - 自动限流 (0.5s 间隔)
 - 失败重试 (指数退避)
+
+---
+
+## 🔒 Privacy Notice
+
+### Data Sent to External Services
+
+When you query a character name, the following data may be sent to external APIs:
+
+| Service | URL | Data Sent | Purpose |
+|---------|-----|-----------|---------|
+| AniList | `anilist.co` | Character name | Primary character lookup |
+| Jikan | `jikan.moe` | Character name | MyAnimeList backup source |
+| Fandom Wiki | `*.fandom.com` | Character name + Anime name | Quotes and descriptions |
+| 萌娘百科 | `zh.moegirl.org.cn` | Character name | Chinese character database |
+| yurippe API | `yurippe.vercel.app` | Character name | Anime quotes database |
+
+### Privacy Protection
+
+- No personal data is collected or transmitted
+- Only character names and anime titles are sent to external services
+- All external requests use HTTPS encryption
+- Local caching minimizes repeated external calls
+
+### Opt-Out Options
+
+```bash
+# Disable external quotes fetching (use local database only)
+export DISABLE_EXTERNAL_QUOTES=1
+python load_character.py "Character Name"
+```
+
+---
+
+## ⚖️ Legal & Copyright Notice
+
+### Quotes Database
+
+The local quotes database (`data/quotes_database.json`) contains:
+- **Fan-collected quotes** from anime/manga for educational/research purposes
+- **Fair use doctrine**: Limited excerpts for character study and AI personality modeling
+- All characters and works belong to their respective copyright holders
+
+### Wiki Content
+
+Descriptions and excerpts are sourced from:
+- **Fandom Wiki** (CC-BY-SA license)
+- **萌娘百科 Moegirlpedia** (CC BY-NC-SA 3.0)
+
+### Usage Restrictions
+
+- ✅ Personal use and research
+- ✅ OpenClaw agent personality configuration
+- ❌ Commercial redistribution of quotes database
+- ❌ Creating competing content databases
+
+### Copyright Holders
+
+Characters referenced in this tool belong to their respective creators and publishers including but not limited to:
+- Saekano: © Fumiaki Maruto, Kurehito Misaki, KADOKAWA
+- Rascal Does Not Dream: © Hajime Kamoshida, Keiji Mizoguchi, KADOKAWA
+- And other respective copyright holders
+
+For DMCA or copyright concerns, please contact through GitHub Issues.
+
+---
+
+## 🛡️ File Safety Notice
+
+⚠️ **Warning About File Operations**
+
+- **REPLACE mode** will overwrite existing `SOUL.md` (automatic backup created at `SOUL.md.backup.YYYYMMDD_HHMMSS`)
+- **MERGE mode** adds content without removing existing characters (idempotent - no duplicates)
+- All write operations use atomic writes (temp file + rename)
+
+**Recommendation**: Back up important `SOUL.md` files before using REPLACE mode.
