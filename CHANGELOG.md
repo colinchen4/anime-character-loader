@@ -1,10 +1,36 @@
 # Changelog
 
 ## v2.5.0 (2026-03-07)
-- Added `--voice-prompt` for voice-ready, API-agnostic structured output
-- Added voice schema fields: `tone`, `pace`, `emotion_range`, `pause_style`, `banned_traits`, `delivery_notes`
-- Added calibration sample lines for future TTS consistency testing
-- Added unit tests for voice prompt generation and rendering
+
+### Added
+- **Quote Reliability Grading** (`--min-quote-grade`): S-F grading system for quote sources
+  - S: Verified original, canonical source
+  - A: High confidence, official source  
+  - B: Good confidence, secondary source
+  - C: Moderate confidence, fan transcription
+  - D: Low confidence, unverified
+  - F: Unreliable, likely incorrect
+- **Use-Case Modes** (`--mode`): Preset configurations for different scenarios
+  - `roleplay`: Immersive RP with relationship graph and sample dialogues
+  - `chatbot`: Balanced assistant with character flavor
+  - `creative`: Writing aid with voice examples and tips
+- **Character Coherence Checker** (`--check-coherence`, `--validate`): 
+  - Validates character consistency across generated content
+  - Detects contradictions, OOC moments, trait violations
+  - Provides coherence score (0-100) and recommendations
+- `--voice-prompt` flag for voice-ready, API-agnostic structured output
+- Voice schema fields: `tone`, `pace`, `emotion_range`, `pause_style`, `banned_traits`, `delivery_notes`
+- Calibration sample lines for future TTS consistency testing
+- `--list-modes` to display available use-case modes
+
+### Changed
+- CLI version bump to v2.5.0
+- Integrated mode presets with automatic flag configuration
+- Enhanced validation with optional coherence checking
+
+### Testing
+- Added 55 new tests for v2.5.0 features
+- Total: 85 tests passing
 
 
 All notable changes to this project will be documented in this file.

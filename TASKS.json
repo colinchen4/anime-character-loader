@@ -60,7 +60,10 @@
   "github": {
     "repo": "colinchen4/anime-character-loader",
     "branch": "main",
-    "ready_to_push": true,
+    "ready_to_push": false,
+    "status": "completed",
+    "commit": "2a31063",
+    "pushed": true,
     "changes": [
       "src/anime_character_loader/legacy.py - Integrated new features",
       "src/anime_character_loader/validator/quote_reliability.py - New",
