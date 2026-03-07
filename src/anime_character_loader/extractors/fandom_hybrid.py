@@ -292,7 +292,11 @@ class FandomHybridFetcher:
         
         # 收集该 section 下的所有元素（直到下一个 h2/h3）
         elements = []
-        for elem in section_elem.find_all_next():
+
+        start_node = section_elem.parent if getattr(section_elem, 'name', None) not in ["h2", "h3"] else section_elem
+        for elem in start_node.find_all_next():
+            if elem == section_elem:
+                continue
             if elem.name in ["h2", "h3"]:
                 break
             elements.append(elem)
@@ -405,9 +409,13 @@ class FandomHybridFetcher:
         # 文本长度合理: +0.15
         if 4 <= len(text) <= 180:
             score += 0.15
+
+        # 位于 quotes section 但没有显式 speaker 时，给予轻度基础分
+        if in_quotes_section and speaker == "unknown":
+            score += 0.2
         
         # 命中对话标记: +0.15
-        if any(c in text for c in ['「', '『', '"', '"', '"', '？', '！']):
+        if any(c in text for c in ['「', '『', '"', '“', '”', '？', '！', '!', '?']):
             score += 0.15
         
         return min(score, 1.0)

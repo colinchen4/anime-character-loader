@@ -26,6 +26,7 @@ Built by [Anchormind AI](https://anchormind-ai.com) — screen-free AI learning 
 - 🔄 **Idempotent merge**: Chapter-level merge with deduplication (same character won't be added twice)
 - 💾 **Smart caching**: 24-hour SQLite cache with automatic retry logic
 - 🎭 **Wikiquote Fetcher**: 3-phase台词抓取 (API → Browser → Local)，带置信度评分与Speaker识别
+- 🗣️ **Voice-ready output**: optional `--voice-prompt` block with API-agnostic voice schema + calibration lines
 - Actual output example:
 <img src="https://github.com/user-attachments/assets/41d52fb6-e82e-4e95-86a5-3a167042d53c" width="600" alt="对话演示">
 
@@ -98,6 +99,9 @@ python load_character.py "霞之丘诗羽"
 
 # Preview without generating
 python load_character.py "加藤惠" --info
+
+# Generate with structured voice guidance for future TTS systems
+python load_character.py "加藤惠" --anime "Saekano" --voice-prompt
 ```
 
 ### Disambiguation Required
@@ -196,6 +200,42 @@ python load_character.py "Sakura"
 if [ $? -eq 20 ]; then
     echo "Need to specify --anime for disambiguation"
 fi
+```
+
+## Voice-Ready Output (`--voice-prompt`)
+
+Use `--voice-prompt` to append a structured, API-agnostic voice block to the generated profile. This is designed for future companion / hardware pipelines without binding the project to a live TTS vendor yet.
+
+Voice schema fields:
+- `tone`
+- `pace`
+- `emotion_range`
+- `pause_style`
+- `banned_traits`
+- `delivery_notes`
+- calibration `sample_lines`
+
+Example:
+
+```markdown
+## Voice Prompt
+
+- character: Megumi Katou
+- source_work: Saenai Heroine no Sodatekata
+- tone: calm, composed, soft-spoken
+- pace: measured and steady
+- emotion_range: narrow-to-medium range; subtle shifts matter more than volume
+- pause_style: short hesitant pauses before vulnerable or personal phrases
+- banned_traits:
+  - robotic monotone
+  - overacted anime squealing
+- delivery_notes:
+  - Keep delivery consistent with the dramatic tone of Saenai Heroine no Sodatekata.
+
+### Voice Calibration Sample Lines
+
+1. [neutral_greeting] Hello. I'm Megumi Katou. Let's keep this simple and honest.
+   - target: baseline identity and neutral cadence
 ```
 
 ## Output Format

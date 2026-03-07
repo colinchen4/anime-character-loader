@@ -26,6 +26,11 @@ from dataclasses import dataclass, asdict
 from enum import Enum
 import sqlite3
 
+from anime_character_loader.generator.voice import (
+    build_voice_prompt,
+    render_voice_prompt_markdown,
+)
+
 try:
     import requests
 except ImportError:
@@ -939,6 +944,7 @@ def main():
     parser.add_argument("--info", "-i", action="store_true", help="Show info only, don't generate")
     parser.add_argument("--force", "-f", action="store_true", help="Force generation even with low confidence")
     parser.add_argument("--select", "-s", type=int, help="Select specific match by index (when multiple found)")
+    parser.add_argument("--voice-prompt", action="store_true", help="Append structured voice prompt guidance for future TTS/voice systems")
     
     args = parser.parse_args()
     
@@ -1004,6 +1010,14 @@ def main():
     # 5. 生成 SOUL.md
     print(f"\n📝 Generating SOUL.md...")
     content = loader.generate_soul(selected)
+
+    if args.voice_prompt:
+        voice_prompt = build_voice_prompt(
+            character=loader._sanitize_field(selected.data.get("name", selected.name)),
+            source_work=loader._sanitize_field(selected.source_work),
+            description=loader._clean_description(selected.data.get("description", "")),
+        )
+        content = content.rstrip() + "\n\n" + render_voice_prompt_markdown(voice_prompt) + "\n"
     
     # 6. 验证
     print("\n🔍 Validating...")

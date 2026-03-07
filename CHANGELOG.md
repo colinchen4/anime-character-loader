@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.5.0 (2026-03-07)
+- Added `--voice-prompt` for voice-ready, API-agnostic structured output
+- Added voice schema fields: `tone`, `pace`, `emotion_range`, `pause_style`, `banned_traits`, `delivery_notes`
+- Added calibration sample lines for future TTS consistency testing
+- Added unit tests for voice prompt generation and rendering
+
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
