@@ -1,9 +1,9 @@
 {
   "project": "anime-character-loader",
   "version": "2.5.0",
-  "status": "in_progress",
+  "status": "completed",
   "created_at": "2026-03-07T23:01:00+08:00",
-  "updated_at": "2026-03-07T23:01:00+08:00",
+  "updated_at": "2026-03-07T23:45:00+08:00",
   "tasks": [
     {
       "id": "P1",
@@ -29,34 +29,48 @@
       "id": "P3",
       "name": "Quote reliability grading",
       "description": "Add reliability grading system for quotes from different sources",
-      "status": "in_progress",
+      "status": "completed",
       "files": [
         "src/anime_character_loader/validator/quote_reliability.py",
-        "src/anime_character_loader/extractors/wikiquote_graded.py"
+        "src/anime_character_loader/extractors/wikiquote_graded.py",
+        "tests/test_quote_reliability.py"
       ]
     },
     {
       "id": "P4",
       "name": "Use-case modes",
       "description": "Add preset modes for different use cases (RP, Chatbot, Creative)",
-      "status": "pending",
+      "status": "completed",
       "files": [
-        "src/anime_character_loader/generator/modes.py"
+        "src/anime_character_loader/generator/modes.py",
+        "tests/test_modes.py"
       ]
     },
     {
       "id": "P5",
       "name": "Character coherence checker",
       "description": "Validate character consistency across generated content",
-      "status": "pending",
+      "status": "completed",
       "files": [
-        "src/anime_character_loader/validator/coherence.py"
+        "src/anime_character_loader/validator/coherence.py",
+        "tests/test_coherence.py"
       ]
     }
   ],
   "github": {
     "repo": "colinchen4/anime-character-loader",
     "branch": "main",
-    "ready_to_push": false
+    "ready_to_push": true,
+    "changes": [
+      "src/anime_character_loader/legacy.py - Integrated new features",
+      "src/anime_character_loader/validator/quote_reliability.py - New",
+      "src/anime_character_loader/validator/coherence.py - New",
+      "src/anime_character_loader/generator/modes.py - New",
+      "src/anime_character_loader/extractors/wikiquote_graded.py - New",
+      "tests/test_quote_reliability.py - New",
+      "tests/test_modes.py - New",
+      "tests/test_coherence.py - New",
+      "TASKS.json - New"
+    ]
   }
 }

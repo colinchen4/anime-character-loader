@@ -34,6 +34,13 @@ from anime_character_loader.generator.relationship import (
     build_relationship_graph,
     render_relationship_graph_markdown,
 )
+from anime_character_loader.generator.modes import (
+    apply_mode,
+    get_mode_by_name,
+    list_modes,
+)
+from anime_character_loader.validator.coherence import check_coherence
+from anime_character_loader.validator.quote_reliability import ReliabilityGrade
 
 try:
     import requests
@@ -940,9 +947,9 @@ class FileManager:
 # ============== CLI ==============
 def main():
     parser = argparse.ArgumentParser(
-        description="Anime Character Loader v2.0 - Multi-source character data with validation"
+        description="Anime Character Loader v2.5.0 - Multi-source character data with validation"
     )
-    parser.add_argument("name", help="Character name (EN/JP/CN)")
+    parser.add_argument("name", nargs="?", help="Character name (EN/JP/CN)")
     parser.add_argument("--anime", "-a", help="Anime/manga name hint for disambiguation")
     parser.add_argument("--output", "-o", default=".", help="Output directory")
     parser.add_argument("--info", "-i", action="store_true", help="Show info only, don't generate")
@@ -950,11 +957,51 @@ def main():
     parser.add_argument("--select", "-s", type=int, help="Select specific match by index (when multiple found)")
     parser.add_argument("--voice-prompt", action="store_true", help="Append structured voice prompt guidance for future TTS/voice systems")
     parser.add_argument("--relationship-graph", action="store_true", help="Generate relationship graph for AI companion coherence")
+    parser.add_argument("--mode", "-m", type=str, help="Use-case mode: roleplay, chatbot, creative")
+    parser.add_argument("--list-modes", action="store_true", help="List available use-case modes")
+    parser.add_argument("--check-coherence", action="store_true", help="Run coherence check on generated content")
+    parser.add_argument("--min-quote-grade", type=str, default="C", help="Minimum quote reliability grade (S/A/B/C/D/F)")
+    parser.add_argument("--validate", action="store_true", help="Run full validation including coherence check")
     
     args = parser.parse_args()
     
+    # Handle --list-modes
+    if args.list_modes:
+        print(f"\n{'='*60}")
+        print("🎭 Available Use-Case Modes")
+        print(f"{'='*60}\n")
+        for mode in list_modes():
+            print(f"  📌 {mode['id'].upper()}")
+            print(f"     {mode['description']}")
+            print(f"     Best for: {', '.join(mode['best_for'])}")
+            print(f"     Features: {', '.join(mode['key_features'])}")
+            print()
+        return 0
+    
+    # Apply mode configuration if specified
+    mode_config = None
+    if args.mode:
+        try:
+            mode_result = apply_mode(args.mode)
+            mode_config = mode_result.config
+            # Auto-enable flags based on mode
+            if mode_config.include_voice_prompt:
+                args.voice_prompt = True
+            if mode_config.include_relationship_graph:
+                args.relationship_graph = True
+            print(f"\n🎮 Mode: {args.mode}")
+            print(f"   Voice prompt: {'✅' if args.voice_prompt else '❌'}")
+            print(f"   Relationship graph: {'✅' if args.relationship_graph else '❌'}")
+        except ValueError as e:
+            print(f"\n❌ Error: {e}")
+            return 1
+    
+    if not args.name:
+        parser.print_help()
+        return 1
+    
     print(f"\n{'='*60}")
-    print("🎭 Anime Character Loader v2.0")
+    print("🎭 Anime Character Loader v2.5.0")
     print(f"{'='*60}")
     
     loader = CharacterLoader()
@@ -1036,6 +1083,25 @@ def main():
     print("\n🔍 Validating...")
     validation = loader.validate_soul(content, selected.data)
     
+    # 6.5 Coherence Check (if enabled)
+    coherence_report = None
+    if args.check_coherence or args.validate:
+        print("\n🔍 Running coherence check...")
+        coherence_report = check_coherence(content)
+        
+        print(f"\n{'='*60}")
+        print("COHERENCE REPORT")
+        print(f"{'='*60}")
+        print(f"Coherence Score: {coherence_report.score:.1f}/100")
+        print(f"Status: {'✅ PASSED' if coherence_report.passed else '❌ ISSUES FOUND'}")
+        
+        if coherence_report.issues:
+            print(f"\nIssues found ({len(coherence_report.issues)}):")
+            for issue in coherence_report.issues[:5]:  # Show first 5
+                severity_icon = {"critical": "🔴", "major": "🟠", "minor": "🟡", "notice": "🔵"}.get(issue.severity.value, "⚪")
+                print(f"  {severity_icon} [{issue.severity.value.upper()}] {issue.description}")
+                print(f"      Suggestion: {issue.suggestion}")
+    
     print(f"\n{'='*60}")
     print("VALIDATION REPORT")
     print(f"{'='*60}")
@@ -1056,8 +1122,13 @@ def main():
     temp_path = FileManager.write_temp(content, selected.name)
     print(f"\n📄 Temp file: {temp_path}")
     
-    # 8. 验证通过后提交
-    if validation.passed or args.force:
+    # 8. 验证通过后提交 (including coherence if checked)
+    validation_passed = validation.passed
+    if coherence_report and not coherence_report.passed and args.validate:
+        validation_passed = False
+        print("\n⚠️ Coherence check failed. Use --force to override.")
+    
+    if validation_passed or args.force:
         final_path = FileManager.generate_final_path(selected.name, args.output)
         final_path = FileManager.commit(temp_path, final_path)
         print(f"✅ Final file: {final_path}")

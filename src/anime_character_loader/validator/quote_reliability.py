@@ -194,11 +194,16 @@ class GradingResult:
         allowed_grades = set(grade_order[:min_index + 1])
         return [q for q in self.graded_quotes if q.grade in allowed_grades]
     
+    @property
+    def total_quotes(self) -> int:
+        """Total number of graded quotes."""
+        return len(self.graded_quotes)
+    
     def to_dict(self) -> Dict[str, Any]:
         return {
             "character": self.character,
             "work": self.work,
-            "total_quotes": len(self.graded_quotes),
+            "total_quotes": self.total_quotes,
             "grade_distribution": {g.value: count for g, count in self.summary.items()},
             "average_score": round(self.average_score, 3),
             "overall_grade": self.overall_grade.value if self.overall_grade else None,
@@ -353,8 +358,16 @@ def grade_quotes_batch(
     
     for q_data in quotes_data:
         # Extract factors from data
+        # Convert string source_type to enum if needed
+        source_type_str = q_data.get("source_type", "unknown")
+        try:
+            source_type = SourceType(source_type_str)
+        except ValueError:
+            # Try conversion from wikiquote source names
+            source_type = convert_wikiquote_source(source_type_str)
+        
         factors = GradingFactors(
-            source_type=SourceType(q_data.get("source_type", "unknown")),
+            source_type=source_type,
             speaker_verified=q_data.get("speaker_verified", False),
             context_verified=q_data.get("context_verified", False),
             has_multiple_attestations=q_data.get("has_multiple_attestations", False),
