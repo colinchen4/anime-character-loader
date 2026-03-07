@@ -1,0 +1,45 @@
+{
+  "character": "Sakurajima Mai",
+  "source_work": "Seishun Buta Yarou",
+  "relationship_summary": "Sakurajima Mai's relationship landscape:\n- 1 romance(s)\n- 1 family(s)\n- 1 mentor(s)",
+  "relationship_count": 3,
+  "relationships": [
+    {
+      "target_character": "Sakuta's",
+      "target_work": "Seishun Buta Yarou",
+      "relationship_type": "romance",
+      "description": "Romantic partner",
+      "stage": "initial",
+      "stage_notes": [],
+      "key_moments": [],
+      "dynamics": [
+        "Dynamic centered around girlfriend"
+      ]
+    },
+    {
+      "target_character": "Unknown Sister",
+      "target_work": "Seishun Buta Yarou",
+      "relationship_type": "family",
+      "description": "Sibling bond",
+      "stage": "initial",
+      "stage_notes": [],
+      "key_moments": [],
+      "dynamics": [
+        "Dynamic centered around sister"
+      ]
+    },
+    {
+      "target_character": "Sakuta's",
+      "target_work": "Seishun Buta Yarou",
+      "relationship_type": "mentor",
+      "description": "Senior/junior dynamic with guidance",
+      "stage": "initial",
+      "stage_notes": [],
+      "key_moments": [],
+      "dynamics": [
+        "Dynamic centered around senpai"
+      ]
+    }
+  ],
+  "narrative_arc_notes": []
+}

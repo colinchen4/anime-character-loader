@@ -1,0 +1,35 @@
+{
+  "character": "Misaka Mikoto",
+  "source_work": "Toaru Kagaku no Railgun",
+  "relationship_summary": "Misaka Mikoto's relationship landscape:\n- 1 rivalry(s)\n- 1 romance(s)",
+  "relationship_count": 2,
+  "relationships": [
+    {
+      "target_character": "Railgun",
+      "target_work": "Toaru Kagaku no Railgun",
+      "relationship_type": "rivalry",
+      "description": "Competitive relationship driving growth",
+      "stage": "initial",
+      "stage_notes": [],
+      "key_moments": [],
+      "dynamics": [
+        "Dynamic centered around rival"
+      ]
+    },
+    {
+      "target_character": "Unknown Love Interest",
+      "target_work": "Toaru Kagaku no Railgun",
+      "relationship_type": "romance",
+      "description": "Romantic tension or relationship",
+      "stage": "initial",
+      "stage_notes": [],
+      "key_moments": [],
+      "dynamics": [
+        "Dynamic centered around love interest"
+      ]
+    }
+  ],
+  "narrative_arc_notes": [
+    "Character navigates both romantic and competitive dynamics; watch for jealousy or distraction."
+  ]
+}

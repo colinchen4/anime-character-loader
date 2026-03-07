@@ -1,0 +1,21 @@
+{
+  "character": "Katou Megumi",
+  "source_work": "Saenai Heroine no Sodatekata",
+  "relationship_summary": "Katou Megumi's relationship landscape:\n- 1 friendship(s)",
+  "relationship_count": 1,
+  "relationships": [
+    {
+      "target_character": "Tomoya's",
+      "target_work": "Saenai Heroine no Sodatekata",
+      "relationship_type": "friendship",
+      "description": "School acquaintance with potential for deeper bond",
+      "stage": "initial",
+      "stage_notes": [],
+      "key_moments": [],
+      "dynamics": [
+        "Dynamic centered around classmate"
+      ]
+    }
+  ],
+  "narrative_arc_notes": []
+}

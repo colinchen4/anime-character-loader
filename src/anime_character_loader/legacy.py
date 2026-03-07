@@ -30,6 +30,10 @@ from anime_character_loader.generator.voice import (
     build_voice_prompt,
     render_voice_prompt_markdown,
 )
+from anime_character_loader.generator.relationship import (
+    build_relationship_graph,
+    render_relationship_graph_markdown,
+)
 
 try:
     import requests
@@ -945,6 +949,7 @@ def main():
     parser.add_argument("--force", "-f", action="store_true", help="Force generation even with low confidence")
     parser.add_argument("--select", "-s", type=int, help="Select specific match by index (when multiple found)")
     parser.add_argument("--voice-prompt", action="store_true", help="Append structured voice prompt guidance for future TTS/voice systems")
+    parser.add_argument("--relationship-graph", action="store_true", help="Generate relationship graph for AI companion coherence")
     
     args = parser.parse_args()
     
@@ -1018,6 +1023,14 @@ def main():
             description=loader._clean_description(selected.data.get("description", "")),
         )
         content = content.rstrip() + "\n\n" + render_voice_prompt_markdown(voice_prompt) + "\n"
+
+    if args.relationship_graph:
+        graph = build_relationship_graph(
+            character=loader._sanitize_field(selected.data.get("name", selected.name)),
+            source_work=loader._sanitize_field(selected.source_work),
+            description=loader._clean_description(selected.data.get("description", "")),
+        )
+        content = content.rstrip() + "\n\n" + render_relationship_graph_markdown(graph) + "\n"
     
     # 6. 验证
     print("\n🔍 Validating...")
